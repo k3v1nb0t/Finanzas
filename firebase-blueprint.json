@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "groupId": { "type": "string", "description": "The ID of the budget group the user belongs to" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "groupId", "role"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A budget group (family or individual)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "inviteCode": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active"] },
+        "budget": { "type": "number", "description": "Monthly budget for the group" },
+        "categoryBudgets": { 
+          "type": "object", 
+          "additionalProperties": { "type": "number" },
+          "description": "Monthly budget per category" 
+        },
+        "customCategories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Custom expense categories for the group"
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "ownerId", "inviteCode", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A single income or expense record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "groupId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "userId", "amount", "type", "category", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Budget groups"
+    },
+    "/groups/{groupId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Transactions within a group"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "object",
+      "description": "System notifications (e.g., email triggers)"
+    }
+    "recurringExpenses": {
+      "schema": {
+        "title": "Recurring Expense",
+        "description": "Template for monthly recurring expenses",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "groupId": { "type": "string" },
+          "amount": { "type": "number" },
+          "category": { "type": "string" },
+          "description": { "type": "string" },
+          "dayOfMonth": { "type": "number" },
+          "paymentMethod": { "type": "string", "enum": ["Efectivo", "Tarjeta", "Transferencia", "Otros"] },
+          "active": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "groupId", "amount", "category", "dayOfMonth", "paymentMethod"]
+      },
+      "description": "Monthly recurring expenses templates"
+    }
+  }
+}
