@@ -4,8 +4,11 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   groupId: string;
+  groupIds: string[];
   role: 'admin' | 'user';
+  status?: 'active' | 'blocked';
   createdAt: any;
+  updatedAt?: any;
 }
 
 export interface Group {
@@ -27,11 +30,14 @@ export interface RecurringExpense {
   id: string;
   groupId: string;
   amount: number;
+  type: TransactionType;
   category: string;
   description: string;
   dayOfMonth: number;
   paymentMethod: PaymentMethod;
   active: boolean;
+  endDate?: string; // Format: YYYY-MM-DD
+  status?: 'active' | 'finished';
   lastProcessedMonth?: string; // Format: YYYY-MM
   createdAt: any;
 }

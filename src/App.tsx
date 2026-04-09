@@ -8,10 +8,13 @@ import {
   TrendingDown, 
   Wallet, 
   Users, 
+  User,
+  Check,
   PieChart, 
   History,
   LayoutDashboard,
   PlusCircle,
+  Pencil,
   ArrowUpRight,
   ArrowDownRight,
   Trash2,
@@ -21,7 +24,8 @@ import {
   CreditCard,
   Banknote,
   Repeat,
-  CalendarDays
+  CalendarDays,
+  Play
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -35,14 +39,20 @@ import {
   doc,
   Timestamp,
   setDoc,
-  limit
+  limit,
+  writeBatch,
+  where,
+  getDocs
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Transaction, CATEGORIES, TransactionType, Group, UserProfile, PaymentMethod, PAYMENT_METHODS, RecurringExpense } from './types';
 import { formatCurrency, cn } from './lib/utils';
 import { handleFirestoreError, OperationType } from './lib/firestore-errors';
-import { format, isLastDayOfMonth } from 'date-fns';
+import { format, isLastDayOfMonth, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+
+const GUATEMALA_TZ = 'America/Guatemala';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   BarChart, 
@@ -59,11 +69,13 @@ import {
 import { toast } from 'sonner';
 
 function Dashboard() {
-  const { user, profile, group, logout, isAdmin, viewMode, setViewMode } = useAuth();
+  const { user, profile, group, groups, logout, isAdmin, viewMode, setViewMode, switchGroup, createGroup, joinGroup } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [memberProfiles, setMemberProfiles] = useState<Record<string, UserProfile>>({});
   const [isAdding, setIsAdding] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'group' | 'recurring'>('dashboard');
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
 
   // Form state
   const [amount, setAmount] = useState('');
@@ -81,6 +93,135 @@ function Dashboard() {
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [isRecurring, setIsRecurring] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState('1');
+  const [endDate, setEndDate] = useState('');
+  const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [hasProcessedRecurring, setHasProcessedRecurring] = useState(false);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [groupAction, setGroupAction] = useState<'create' | 'join'>('create');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [joinInviteCode, setJoinInviteCode] = useState('');
+  const [isGroupActionLoading, setIsGroupActionLoading] = useState(false);
+
+  // Fetch member profiles
+  useEffect(() => {
+    if (!group?.members || group.members.length === 0) {
+      setMemberProfiles({});
+      return;
+    }
+
+    const fetchMembers = async () => {
+      try {
+        const profiles: Record<string, UserProfile> = {};
+        const memberIds = group.members;
+        
+        // Firestore 'in' query is limited to 10 items. For larger groups, we'd need to chunk this.
+        // Assuming family groups are small (< 10 members).
+        const q = query(collection(db, 'users'), where('uid', 'in', memberIds));
+        const snapshot = await getDocs(q);
+        snapshot.forEach(doc => {
+          profiles[doc.id] = doc.data() as UserProfile;
+        });
+        setMemberProfiles(profiles);
+      } catch (error) {
+        console.error("Error fetching member profiles:", error);
+      }
+    };
+
+    fetchMembers();
+  }, [group?.members]);
+
+  const exportToCSV = () => {
+    if (!group) return;
+    
+    // Header
+    let csv = "Tipo,Categoría,Monto,Descripción,Fecha,Usuario\n";
+    
+    // All Transactions
+    transactions.forEach(t => {
+      const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
+      const row = [
+        t.type === 'income' ? 'Ingreso' : 'Gasto',
+        t.category,
+        t.amount,
+        `"${t.description || ''}"`,
+        format(tDate, 'yyyy-MM-dd'),
+        t.userName
+      ].join(",");
+      csv += row + "\n";
+    });
+
+    // Budget Info
+    csv += "\n\nPresupuesto del Grupo\n";
+    csv += `Presupuesto Global,${group.budget || 0}\n`;
+    csv += "\nPresupuesto por Categoría\n";
+    Object.entries(group.categoryBudgets || {}).forEach(([cat, budget]) => {
+      csv += `${cat},${budget}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `FamiCash_Historial_Completo_${group.name}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadTemplate = () => {
+    let csv = "Categoría,Presupuesto\n";
+    CATEGORIES.expense.forEach(cat => {
+      csv += `${cat},0\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "FamiCash_Plantilla_Presupuesto.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile?.groupId) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n');
+      const newCategoryBudgets: Record<string, number> = {};
+      let totalBudget = 0;
+
+      // Skip header
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const [category, budgetStr] = line.split(',');
+        const budget = parseFloat(budgetStr);
+        if (category && !isNaN(budget)) {
+          newCategoryBudgets[category] = budget;
+          totalBudget += budget;
+        }
+      }
+
+      try {
+        await setDoc(doc(db, 'groups', profile.groupId), {
+          budget: totalBudget,
+          categoryBudgets: newCategoryBudgets
+        }, { merge: true });
+        toast.success('Presupuesto importado con éxito');
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `groups/${profile.groupId}`);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   useEffect(() => {
     if (!profile?.groupId) return;
@@ -124,7 +265,7 @@ function Dashboard() {
   }, [profile?.groupId]);
 
   useEffect(() => {
-    if (!profile?.groupId || !user || recurringExpenses.length === 0) return;
+    if (!profile?.groupId || !user || recurringExpenses.length === 0 || hasProcessedRecurring) return;
 
     const today = new Date();
     const currentMonth = format(today, 'yyyy-MM');
@@ -132,54 +273,100 @@ function Dashboard() {
     const isLastDay = isLastDayOfMonth(today);
 
     const processExpenses = async () => {
+      setHasProcessedRecurring(true);
       for (const re of recurringExpenses) {
-        // Logic: Process if day has arrived OR if it's the last day of month and the scheduled day is later
+        if (re.status === 'finished') continue;
+
+        if (re.endDate && new Date(re.endDate) < today) {
+          try {
+            await setDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', re.id), {
+              ...re,
+              status: 'finished',
+              active: false
+            });
+            toast.info(`Fijo "${re.category}" ha finalizado`);
+          } catch (error) {
+            console.error('Error finishing recurring expense:', error);
+          }
+          continue;
+        }
+
         const shouldProcess = re.dayOfMonth <= currentDay || (isLastDay && re.dayOfMonth > currentDay);
 
-        if (re.lastProcessedMonth !== currentMonth && shouldProcess) {
+        // EXTRA CHECK: Verify if a transaction for this recurringId already exists in THIS month
+        const alreadyExists = transactions.some(t => 
+          t.recurringId === re.id && 
+          t.date && 
+          format(t.date.toDate ? t.date.toDate() : new Date(t.date), 'yyyy-MM') === currentMonth
+        );
+
+        if (re.lastProcessedMonth !== currentMonth && shouldProcess && !alreadyExists) {
           try {
-            // Register transaction
-            await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), {
+            const batch = writeBatch(db);
+            // Deterministic ID to prevent duplicates
+            const txId = `rec_${re.id}_${currentMonth}`;
+            
+            batch.set(doc(db, 'groups', profile.groupId, 'transactions', txId), {
               groupId: profile.groupId,
               userId: user.uid,
               userName: user.displayName || 'Sistema',
               amount: re.amount,
-              type: 'expense',
+              type: re.type || 'expense',
               category: re.category,
               description: `(Fijo) ${re.description || re.category}`,
-              paymentMethod: re.paymentMethod,
+              paymentMethod: re.type === 'income' ? null : re.paymentMethod,
               date: serverTimestamp(),
               createdAt: serverTimestamp(),
               isRecurring: true,
               recurringId: re.id
             });
 
-            // Update last processed month on the recurring expense
-            await setDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', re.id), {
-              ...re,
+            batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', re.id), {
               lastProcessedMonth: currentMonth
             });
             
-            toast.info(`Gasto fijo "${re.category}" registrado automáticamente`);
+            await batch.commit();
+            toast.info(`Fijo "${re.category}" registrado`);
           } catch (error) {
-            console.error('Error processing recurring expense:', error);
+            // Ignore if already exists (another client processed it)
+            if (error instanceof Error && !error.message.includes('already-exists')) {
+              console.error('Error processing recurring expense:', error);
+            }
           }
         }
       }
     };
 
     processExpenses();
-  }, [profile?.groupId, user, recurringExpenses]);
+  }, [profile?.groupId, user, recurringExpenses, transactions, hasProcessedRecurring]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
+      return formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
+    });
+  }, [transactions, selectedMonth]);
+
+  const paymentMethodStats = useMemo(() => {
+    const methods: Record<string, number> = {};
+    filteredTransactions
+      .filter(t => t.type === 'expense')
+      .forEach(t => {
+        const method = t.paymentMethod || 'Otros';
+        methods[method] = (methods[method] || 0) + t.amount;
+      });
+    return Object.entries(methods).map(([name, value]) => ({ name, value }));
+  }, [filteredTransactions]);
 
   const stats = useMemo(() => {
-    const income = transactions
+    const income = filteredTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
-    const expense = transactions
+    const expense = filteredTransactions
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
     return { income, expense, balance: income - expense };
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const budgetProgress = useMemo(() => {
     if (!group?.budget) return null;
@@ -196,7 +383,7 @@ function Dashboard() {
     
     // Calculate expenses per category
     const expensesByCategory: Record<string, number> = {};
-    transactions
+    filteredTransactions
       .filter(t => t.type === 'expense')
       .forEach(t => {
         expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.amount;
@@ -217,39 +404,42 @@ function Dashboard() {
   }, [group?.categoryBudgets, transactions]);
 
   const chartData = useMemo(() => {
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = new Date(year, month - 1, i + 1);
       return format(d, 'yyyy-MM-dd');
-    }).reverse();
+    });
 
-    return last7Days.map(day => {
-      const dayTxs = transactions.filter(t => {
+    return days.map(day => {
+      const dayTxs = filteredTransactions.filter(t => {
         const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-        return format(tDate, 'yyyy-MM-dd') === day;
+        const dayStr = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM-dd');
+        return dayStr === day;
       });
       return {
-        name: format(new Date(day), 'eee', { locale: es }),
+        name: parseInt(day.split('-')[2]).toString(),
         Ingresos: dayTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0),
         Gastos: dayTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
       };
     });
-  }, [transactions]);
+  }, [filteredTransactions, selectedMonth]);
 
   const categoryData = useMemo(() => {
     const categories: Record<string, number> = {};
-    transactions.filter(t => t.type === 'expense').forEach(t => {
+    filteredTransactions.filter(t => t.type === 'expense').forEach(t => {
       categories[t.category] = (categories[t.category] || 0) + t.amount;
     });
     return Object.entries(categories).map(([name, value]) => ({ name, value }));
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const handleAddTransaction = async (e: FormEvent) => {
     e.preventDefault();
     if (!profile?.groupId || !user) return;
 
     try {
-      await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), {
+      const data = {
         groupId: profile.groupId,
         userId: user.uid,
         userName: user.displayName || 'Usuario',
@@ -258,15 +448,68 @@ function Dashboard() {
         category,
         description,
         paymentMethod: type === 'expense' ? paymentMethod : null,
-        date: Timestamp.fromDate(new Date(date)),
-        createdAt: serverTimestamp(),
-      });
+        date: Timestamp.fromDate(fromZonedTime(date, GUATEMALA_TZ)),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (editingTransactionId) {
+        await setDoc(doc(db, 'groups', profile.groupId, 'transactions', editingTransactionId), data, { merge: true });
+        toast.success('Transacción actualizada');
+      } else {
+        await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), {
+          ...data,
+          createdAt: serverTimestamp(),
+        });
+        toast.success('Transacción agregada');
+      }
+
       setIsAdding(false);
+      setEditingTransactionId(null);
       setAmount('');
       setCategory('');
       setDescription('');
       setIsRecurring(false);
-      toast.success('Transacción agregada');
+    } catch (error) {
+      handleFirestoreError(error, editingTransactionId ? OperationType.UPDATE : OperationType.WRITE, `groups/${profile.groupId}/transactions`);
+    }
+  };
+
+  const handleProcessRecurringManually = async (re: RecurringExpense) => {
+    if (!profile?.groupId || !user) return;
+    
+    const today = new Date();
+    const currentMonth = format(today, 'yyyy-MM');
+    
+    try {
+      const batch = writeBatch(db);
+      // Use a unique ID but allow manual re-processing if needed by adding a timestamp or random string
+      // However, the user said "deterministic" before. Let's use a slightly different ID for manual ones
+      // or just allow it to overwrite if it's the same month.
+      // Actually, user wants to avoid double execution but also wants a manual button.
+      // Let's use a timestamp for manual ones to allow multiple if they really want to.
+      const txId = `manual_rec_${re.id}_${Date.now()}`;
+      
+      batch.set(doc(db, 'groups', profile.groupId, 'transactions', txId), {
+        groupId: profile.groupId,
+        userId: user.uid,
+        userName: user.displayName || 'Sistema',
+        amount: re.amount,
+        type: re.type || 'expense',
+        category: re.category,
+        description: `(Manual) ${re.description || re.category}`,
+        paymentMethod: re.type === 'income' ? null : re.paymentMethod,
+        date: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        isRecurring: true,
+        recurringId: re.id
+      });
+
+      batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', re.id), {
+        lastProcessedMonth: currentMonth
+      });
+      
+      await batch.commit();
+      toast.success(`Fijo "${re.category}" procesado manualmente`);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `groups/${profile.groupId}/transactions`);
     }
@@ -277,23 +520,39 @@ function Dashboard() {
     if (!profile?.groupId) return;
 
     try {
-      await addDoc(collection(db, 'groups', profile.groupId, 'recurringExpenses'), {
+      const data = {
         groupId: profile.groupId,
         amount: parseFloat(amount),
+        type,
         category,
         description,
         dayOfMonth: parseInt(dayOfMonth),
-        paymentMethod,
+        paymentMethod: type === 'expense' ? paymentMethod : 'Otros',
         active: true,
-        createdAt: serverTimestamp(),
-      });
+        endDate: endDate || null,
+        status: 'active',
+        updatedAt: serverTimestamp(),
+      };
+
+      if (editingRecurringId) {
+        await setDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', editingRecurringId), data, { merge: true });
+        toast.success('Gasto fijo actualizado');
+      } else {
+        await addDoc(collection(db, 'groups', profile.groupId, 'recurringExpenses'), {
+          ...data,
+          createdAt: serverTimestamp(),
+        });
+        toast.success('Gasto fijo configurado');
+      }
+      
       setIsAdding(false);
+      setEditingRecurringId(null);
       setAmount('');
       setCategory('');
       setDescription('');
-      toast.success('Gasto fijo configurado');
+      setEndDate('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `groups/${profile.groupId}/recurringExpenses`);
+      handleFirestoreError(error, editingRecurringId ? OperationType.UPDATE : OperationType.WRITE, `groups/${profile.groupId}/recurringExpenses`);
     }
   };
 
@@ -341,6 +600,27 @@ function Dashboard() {
     }
   };
 
+  const handleGroupAction = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsGroupActionLoading(true);
+    try {
+      if (groupAction === 'create') {
+        await createGroup(newGroupName);
+        toast.success('Grupo creado con éxito');
+        setNewGroupName('');
+      } else {
+        await joinGroup(joinInviteCode);
+        toast.success('Te has unido al grupo');
+        setJoinInviteCode('');
+      }
+      setIsGroupModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al procesar la solicitud');
+    } finally {
+      setIsGroupActionLoading(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!profile?.groupId) return;
     try {
@@ -351,6 +631,30 @@ function Dashboard() {
     }
   };
 
+  if (profile?.status === 'blocked') {
+    return (
+      <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4 text-center">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-xl border border-red-100"
+        >
+          <div className="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center text-red-600 mx-auto mb-8">
+            <X size={40} />
+          </div>
+          <h1 className="text-3xl font-bold mb-4 text-red-600">Cuenta Bloqueada</h1>
+          <p className="text-gray-500 mb-8">Tu cuenta ha sido bloqueada por un administrador debido a un incumplimiento de las normas.</p>
+          <button 
+            onClick={logout}
+            className="w-full bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold hover:bg-gray-200 transition-colors"
+          >
+            Cerrar Sesión
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans">
       {/* Header */}
@@ -360,13 +664,33 @@ function Dashboard() {
             <div className="w-10 h-10 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#5A5A40]/20">
               <Wallet size={24} />
             </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">FamiCash</h1>
-              <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest">{group?.name || 'Cargando...'}</p>
+            <div className="flex flex-col">
+              <h1 className="text-lg font-bold tracking-tight leading-tight">FamiCash</h1>
+              {groups.length > 1 ? (
+                <select 
+                  value={profile?.groupId || ''} 
+                  onChange={(e) => switchGroup(e.target.value)}
+                  className="bg-transparent border-none p-0 text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest focus:ring-0 cursor-pointer hover:underline"
+                >
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest">{group?.name || 'Cargando...'}</p>
+              )}
             </div>
           </div>
           
           <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center bg-gray-100 rounded-xl p-1">
+              <input 
+                type="month" 
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-[#5A5A40] focus:ring-0 py-1"
+              />
+            </div>
             {isAdmin && (
               <button 
                 onClick={() => setViewMode(viewMode === 'admin' ? 'personal' : 'admin')}
@@ -392,6 +716,16 @@ function Dashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 pt-6 pb-32">
+        <div className="sm:hidden mb-6">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Mes Seleccionado</label>
+          <input 
+            type="month" 
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="w-full bg-white border border-[#E4E3E0] rounded-2xl py-3 px-4 text-sm font-bold text-[#5A5A40] focus:ring-2 focus:ring-[#5A5A40]"
+          />
+        </div>
+
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <motion.div 
@@ -597,6 +931,25 @@ function Dashboard() {
                 </div>
               </div>
 
+              {/* Payment Methods Summary */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
+                <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                  <CreditCard size={20} className="text-gray-400" />
+                  Cuadre por Forma de Pago
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {PAYMENT_METHODS.map(method => {
+                    const amount = paymentMethodStats.find(s => s.name === method)?.value || 0;
+                    return (
+                      <div key={method} className="bg-[#F5F5F0] p-4 rounded-2xl">
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">{method}</p>
+                        <p className="text-lg font-black text-[#5A5A40]">{formatCurrency(amount)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Recent Transactions */}
               <div className="bg-white rounded-3xl shadow-sm border border-[#E4E3E0] overflow-hidden">
                 <div className="p-6 border-b border-[#E4E3E0] flex items-center justify-between">
@@ -609,7 +962,7 @@ function Dashboard() {
                   </button>
                 </div>
                 <div className="divide-y divide-[#E4E3E0]">
-                  {transactions.slice(0, 5).map((tx) => (
+                  {filteredTransactions.slice(0, 5).map((tx) => (
                     <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                       <div className="flex items-center gap-4">
                         <div className={cn(
@@ -640,9 +993,9 @@ function Dashboard() {
                       </p>
                     </div>
                   ))}
-                  {transactions.length === 0 && (
+                  {filteredTransactions.length === 0 && (
                     <div className="p-12 text-center text-gray-500">
-                      No hay transacciones aún.
+                      No hay transacciones en este mes.
                     </div>
                   )}
                 </div>
@@ -658,50 +1011,84 @@ function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <h2 className="text-2xl font-bold">Historial Completo</h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Historial del Mes</h2>
+                <button 
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E4E3E0] rounded-xl text-xs font-bold text-[#5A5A40] hover:bg-gray-50 transition-colors"
+                >
+                  <ArrowDownRight size={14} />
+                  Exportar CSV
+                </button>
+              </div>
               <div className="bg-white rounded-3xl shadow-sm border border-[#E4E3E0] overflow-hidden">
                 <div className="divide-y divide-[#E4E3E0]">
-                  {transactions.map((tx) => (
-                    <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 group">
-                      <div className="flex items-center gap-4">
+                  {filteredTransactions.map((tx) => (
+                    <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 group gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                         <div className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center",
+                          "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex-shrink-0 flex items-center justify-center",
                           tx.type === 'income' ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
                         )}>
-                          {tx.type === 'income' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
+                          {tx.type === 'income' ? <ArrowUpRight size={18} className="sm:w-5 sm:h-5" /> : <ArrowDownRight size={18} className="sm:w-5 sm:h-5" />}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{tx.description || tx.category}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-medium text-sm sm:text-base">{tx.description || tx.category}</p>
                             {tx.isRecurring && (
-                              <span className="bg-[#5A5A40]/10 text-[#5A5A40] text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-tighter flex items-center gap-0.5">
-                                <Repeat size={8} /> Fijo
+                              <span className="bg-[#5A5A40]/10 text-[#5A5A40] text-[7px] sm:text-[8px] font-black uppercase px-1 py-0.5 rounded tracking-tighter flex-shrink-0 flex items-center gap-0.5">
+                                <Repeat size={7} className="sm:w-2 sm:h-2" /> Fijo
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500">
-                            {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'PPP', { locale: es })} • {tx.userName}
+                          <p className="text-[10px] sm:text-xs text-gray-500">
+                            <span className="sm:hidden">{formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'dd/MM/yy')}</span>
+                            <span className="hidden sm:inline">{formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'PPP', { locale: es })}</span>
+                            {` • ${tx.userName}`}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3 flex-shrink-0 text-right">
                         <p className={cn(
-                          "font-bold",
+                          "font-bold text-sm sm:text-base whitespace-nowrap",
                           tx.type === 'income' ? "text-green-600" : "text-red-600"
                         )}>
                           {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                         </p>
-                        {tx.userId === user?.uid && (
+                        <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                           <button 
-                            onClick={() => handleDelete(tx.id)}
-                            className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                            onClick={() => {
+                              setEditingTransactionId(tx.id);
+                              setAmount(tx.amount.toString());
+                              setType(tx.type);
+                              setCategory(tx.category);
+                              setDescription(tx.description || '');
+                              setPaymentMethod(tx.paymentMethod || 'Efectivo');
+                              setDate(formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'yyyy-MM-dd'));
+                              setIsAdding(true);
+                              setIsRecurring(false);
+                            }}
+                            className="p-1.5 sm:p-2 text-gray-300 hover:text-[#5A5A40]"
                           >
-                            <Trash2 size={18} />
+                            <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" />
                           </button>
-                        )}
+                          {tx.userId === user?.uid && (
+                            <button 
+                              onClick={() => handleDelete(tx.id)}
+                              className="p-1.5 sm:p-2 text-gray-300 hover:text-red-500"
+                            >
+                              <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
+                  {filteredTransactions.length === 0 && (
+                    <div className="p-12 text-center text-gray-400">
+                      No hay transacciones para el mes seleccionado.
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -719,37 +1106,76 @@ function Dashboard() {
                 <h2 className="text-2xl font-bold mb-2">{group?.name}</h2>
                 <p className="text-gray-500 mb-6">Gestiona los miembros de tu familia o grupo.</p>
                 
-                <div className="bg-[#F5F5F0] p-4 rounded-2xl mb-8 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-[#5A5A40]">Código de Invitación</p>
-                    <p className="text-2xl font-mono font-bold">{group?.inviteCode}</p>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+                  <div className="w-full sm:w-auto flex items-center gap-3 p-4 bg-[#F5F5F0] rounded-2xl border border-[#E4E3E0]">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]">Código de Invitación</p>
+                      <p className="text-xl font-mono font-bold">{group?.inviteCode}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const shareUrl = `${window.location.origin}${window.location.pathname}?join=${group?.inviteCode}`;
+                        const message = `¡Hola! Únete a mi grupo "${group?.name}" en Finanza para gestionar nuestros gastos juntos.\n\nCódigo: ${group?.inviteCode}\n\nÚnete aquí: ${shareUrl}`;
+                        navigator.clipboard.writeText(message);
+                        toast.success('Invitación copiada');
+                      }}
+                      className="ml-auto p-2 bg-white rounded-xl shadow-sm border border-[#E4E3E0] hover:bg-gray-50 transition-colors"
+                    >
+                      <Plus size={18} className="rotate-45" />
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => {
-                      const shareUrl = `${window.location.origin}${window.location.pathname}?join=${group?.inviteCode}`;
-                      const message = `¡Hola! Únete a mi grupo "${group?.name}" en Finanza para gestionar nuestros gastos juntos.\n\nCódigo: ${group?.inviteCode}\n\nÚnete aquí: ${shareUrl}`;
-                      navigator.clipboard.writeText(message);
-                      toast.success('Invitación copiada al portapapeles');
-                    }}
-                    className="bg-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm border border-[#E4E3E0] hover:bg-gray-50 transition-colors"
-                  >
-                    Copiar Invitación
-                  </button>
+                  
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <button 
+                      onClick={() => {
+                        setGroupAction('create');
+                        setIsGroupModalOpen(true);
+                      }}
+                      className="flex-1 sm:flex-none bg-[#5A5A40] text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-[#4A4A30] transition-colors"
+                    >
+                      Nuevo Grupo
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setGroupAction('join');
+                        setIsGroupModalOpen(true);
+                      }}
+                      className="flex-1 sm:flex-none bg-white text-[#5A5A40] border border-[#E4E3E0] px-4 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors"
+                    >
+                      Unirse a Grupo
+                    </button>
+                  </div>
                 </div>
 
                 <h3 className="font-semibold mb-4">Miembros ({group?.members.length})</h3>
                 <div className="space-y-4">
-                  {group?.members.map((memberId) => (
-                    <div key={memberId} className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold">
-                        {memberId.substring(0, 2).toUpperCase()}
+                  {group?.members.map((memberId) => {
+                    const memberProfile = memberProfiles[memberId];
+                    const displayName = memberProfile?.displayName || memberProfile?.email || 'Miembro';
+                    
+                    return (
+                      <div key={memberId} className="flex items-center gap-3">
+                        {memberProfile?.photoURL ? (
+                          <img 
+                            src={memberProfile.photoURL} 
+                            alt={displayName} 
+                            className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold">
+                            {displayName.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {memberId === user?.uid ? `${displayName} (Tú)` : displayName}
+                          </p>
+                          <p className="text-xs text-gray-400">{memberId === group.ownerId ? 'Propietario' : 'Colaborador'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{memberId === user?.uid ? 'Tú' : 'Miembro'}</p>
-                        <p className="text-xs text-gray-400">{memberId === group.ownerId ? 'Propietario' : 'Colaborador'}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>
@@ -780,26 +1206,66 @@ function Dashboard() {
 
               <div className="grid grid-cols-1 gap-4">
                 {recurringExpenses.map((re) => (
-                  <div key={re.id} className="bg-white p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-[#F5F5F0] rounded-2xl flex items-center justify-center text-[#5A5A40]">
-                        <CalendarDays size={24} />
+                  <div key={re.id} className="bg-white p-4 sm:p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F0] rounded-2xl flex-shrink-0 flex items-center justify-center text-[#5A5A40]">
+                        <CalendarDays size={20} className="sm:w-6 sm:h-6" />
                       </div>
-                      <div>
-                        <p className="font-bold">{re.description || re.category}</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                          Día {re.dayOfMonth} • {re.paymentMethod}
-                        </p>
+                      <div className="min-w-0">
+                        <p className="font-bold truncate">{re.description || re.category}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate">
+                            Día {re.dayOfMonth} • {re.paymentMethod}
+                          </p>
+                          {re.status === 'finished' && (
+                            <span className="text-[8px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter flex-shrink-0">Finalizado</span>
+                          )}
+                          {re.endDate && re.status !== 'finished' && (
+                            <span className="text-[8px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter flex-shrink-0">Hasta: {re.endDate}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-black text-red-600">{formatCurrency(re.amount)}</p>
-                      <button 
-                        onClick={() => handleDeleteRecurring(re.id)}
-                        className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                    <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 text-right">
+                      <div className="mr-1 sm:mr-2">
+                        <p className={cn(
+                          "font-black text-sm sm:text-base whitespace-nowrap",
+                          re.type === 'income' ? "text-green-600" : "text-red-600"
+                        )}>
+                          {re.type === 'income' ? '+' : '-'}{formatCurrency(re.amount)}
+                        </p>
+                      </div>
+                      <div className="flex items-center">
+                        <button 
+                          onClick={() => handleProcessRecurringManually(re)}
+                          className="p-1.5 sm:p-2 text-gray-300 hover:text-green-600 transition-colors"
+                          title="Procesar ahora"
+                        >
+                          <Play size={16} className="sm:w-[18px] sm:h-[18px]" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEditingRecurringId(re.id);
+                            setAmount(re.amount.toString());
+                            setType(re.type || 'expense');
+                            setCategory(re.category);
+                            setDescription(re.description);
+                            setDayOfMonth(re.dayOfMonth.toString());
+                            setPaymentMethod(re.paymentMethod);
+                            setEndDate(re.endDate || '');
+                            setIsAdding(true);
+                          }}
+                          className="p-1.5 sm:p-2 text-gray-300 hover:text-[#5A5A40] transition-colors"
+                        >
+                          <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteRecurring(re.id)}
+                          className="p-1.5 sm:p-2 text-gray-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -917,6 +1383,68 @@ function Dashboard() {
           </button>
         </div>
       </nav>
+
+      {/* Group Action Modal */}
+      <AnimatePresence>
+        {isGroupModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold">
+                    {groupAction === 'create' ? 'Crear Nuevo Grupo' : 'Unirse a un Grupo'}
+                  </h2>
+                  <button onClick={() => setIsGroupModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleGroupAction} className="space-y-6">
+                  {groupAction === 'create' ? (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Nombre del Grupo</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value)}
+                        placeholder="Ej. Familia Pérez"
+                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40]"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Código de Invitación</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={joinInviteCode}
+                        onChange={(e) => setJoinInviteCode(e.target.value.toUpperCase())}
+                        placeholder="ABC-123"
+                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40]"
+                      />
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit"
+                    disabled={isGroupActionLoading}
+                    className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-[#4A4A30] transition-colors disabled:opacity-50"
+                  >
+                    {isGroupActionLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+                    {groupAction === 'create' ? 'Crear Grupo' : 'Unirse'}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Budget Modal */}
       <AnimatePresence>
@@ -1044,6 +1572,23 @@ function Dashboard() {
                     </div>
                   </div>
 
+                  <div className="space-y-4 pt-6 border-t border-[#F0EFEA]">
+                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Importar/Exportar</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={downloadTemplate}
+                        className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors"
+                      >
+                        Descargar Plantilla
+                      </button>
+                      <label className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors cursor-pointer">
+                        Subir CSV
+                        <input type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+
                   <button 
                     type="submit"
                     className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors"
@@ -1075,9 +1620,15 @@ function Dashboard() {
               className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold">{isRecurring ? 'Nuevo Gasto Fijo' : 'Nueva Transacción'}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold">
+                  {editingRecurringId ? 'Editar Fijo' : editingTransactionId ? 'Editar Transacción' : isRecurring ? 'Nuevo Fijo' : 'Nueva Transacción'}
+                </h2>
                 <button 
-                  onClick={() => setIsAdding(false)}
+                  onClick={() => {
+                    setIsAdding(false);
+                    setEditingRecurringId(null);
+                    setEditingTransactionId(null);
+                  }}
                   className="p-2 hover:bg-gray-100 rounded-full transition-colors"
                 >
                   <X size={24} />
@@ -1086,7 +1637,7 @@ function Dashboard() {
               <form 
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (isRecurring) {
+                  if (isRecurring || editingRecurringId) {
                     handleAddRecurring(e);
                   } else {
                     handleAddTransaction(e);
@@ -1094,7 +1645,7 @@ function Dashboard() {
                 }} 
                 className="space-y-5"
               >
-                {!isRecurring && (
+                {(true) && (
                   <div className="flex p-1 bg-gray-100 rounded-2xl">
                     <button
                       type="button"
@@ -1150,7 +1701,7 @@ function Dashboard() {
                       ))}
                     </select>
                   </div>
-                  {type === 'expense' && !isRecurring ? (
+                  {type === 'expense' && !(isRecurring || editingRecurringId) ? (
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Fecha</label>
                       <input 
@@ -1161,7 +1712,7 @@ function Dashboard() {
                         className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
                       />
                     </div>
-                  ) : type === 'expense' && isRecurring ? (
+                  ) : (isRecurring || editingRecurringId) ? (
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Día del Mes</label>
                       <select 
@@ -1189,34 +1740,20 @@ function Dashboard() {
                   )}
                 </div>
 
-                {type === 'expense' && !isRecurring && (
+                {(isRecurring || editingRecurringId) && (
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Forma de Pago</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PAYMENT_METHODS.map(method => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => setPaymentMethod(method)}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border transition-all",
-                            paymentMethod === method 
-                              ? "bg-[#5A5A40] text-white border-[#5A5A40] shadow-md" 
-                              : "bg-white text-gray-600 border-gray-200 hover:border-[#5A5A40]"
-                          )}
-                        >
-                          {method === 'Efectivo' && <Banknote size={16} />}
-                          {method === 'Tarjeta' && <CreditCard size={16} />}
-                          {method === 'Transferencia' && <ArrowUpRight size={16} />}
-                          {method === 'Otros' && <PlusCircle size={16} />}
-                          {method}
-                        </button>
-                      ))}
-                    </div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Fecha Fin (Opcional)</label>
+                    <input 
+                      type="date" 
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                    />
+                    <p className="text-[10px] text-gray-400 px-2">El fijo se marcará como FINALIZADO después de esta fecha.</p>
                   </div>
                 )}
 
-                {isRecurring && (
+                {(type === 'expense' || isRecurring || editingRecurringId) && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Forma de Pago</label>
                     <div className="grid grid-cols-2 gap-2">
@@ -1258,7 +1795,7 @@ function Dashboard() {
                   type="submit"
                   className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-[#4A4A30] transition-colors"
                 >
-                  {isRecurring ? 'Configurar Gasto Fijo' : 'Guardar Transacción'}
+                  {editingRecurringId ? 'Actualizar Fijo' : editingTransactionId ? 'Actualizar Transacción' : isRecurring ? 'Configurar Fijo' : 'Guardar Transacción'}
                 </button>
               </form>
             </motion.div>
@@ -1445,6 +1982,38 @@ function Landing() {
   );
 }
 
+function BlockedScreen() {
+  const { logout } = useAuth();
+  return (
+    <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4 text-center">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-xl border border-[#E4E3E0]"
+      >
+        <div className="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center text-red-600 mx-auto mb-8">
+          <X size={40} />
+        </div>
+        <h1 className="text-3xl font-bold mb-4">Cuenta Bloqueada</h1>
+        <p className="text-gray-500 mb-8">Lo sentimos, tu acceso a Finanza ha sido restringido por incumplimiento de nuestras normas de uso.</p>
+        
+        <div className="space-y-4">
+          <div className="p-4 bg-red-50 rounded-2xl text-red-800 text-sm font-medium">
+            Estado: Acceso denegado
+          </div>
+          <button 
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-2 text-gray-400 hover:text-red-500 font-medium transition-colors"
+          >
+            <LogOut size={18} />
+            Cerrar Sesión
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function AdminPanel() {
   const { logout, setViewMode } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
@@ -1485,6 +2054,16 @@ function AdminPanel() {
       toast.success('Grupo autorizado correctamente');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `groups/${groupId}`);
+    }
+  };
+
+  const toggleUserStatus = async (userId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
+    try {
+      await setDoc(doc(db, 'users', userId), { status: newStatus }, { merge: true });
+      toast.success(`Usuario ${newStatus === 'blocked' ? 'bloqueado' : 'desbloqueado'} correctamente`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
     }
   };
 
@@ -1544,15 +2123,15 @@ function AdminPanel() {
               pendingGroups.map(g => {
                 const owner = users.find(u => u.uid === g.ownerId);
                 return (
-                  <div key={g.id} className="p-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                    <div>
-                      <h3 className="font-bold text-lg">{g.name}</h3>
-                      <p className="text-sm text-gray-500">Solicitado por: {owner?.displayName || owner?.email || 'Desconocido'}</p>
+                  <div key={g.id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 transition-colors gap-4">
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-lg truncate">{g.name}</h3>
+                      <p className="text-sm text-gray-500 truncate">Solicitado por: {owner?.displayName || owner?.email || 'Desconocido'}</p>
                       <p className="text-xs text-gray-400">ID: {g.id}</p>
                     </div>
                     <button 
                       onClick={() => authorizeGroup(g.id)}
-                      className="bg-[#5A5A40] text-white px-6 py-2 rounded-xl font-bold hover:bg-[#4A4A30] transition-colors"
+                      className="bg-[#5A5A40] text-white px-4 sm:px-6 py-2 rounded-xl font-bold hover:bg-[#4A4A30] transition-colors flex-shrink-0 text-sm"
                     >
                       Autorizar
                     </button>
@@ -1566,16 +2145,38 @@ function AdminPanel() {
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white rounded-[40px] shadow-xl border border-[#E4E3E0] overflow-hidden">
             <div className="p-8 border-b border-[#F0EFEA]">
-              <h2 className="text-xl font-bold">Todos los Grupos</h2>
+              <h2 className="text-xl font-bold">Gestión de Usuarios</h2>
             </div>
             <div className="divide-y divide-[#F0EFEA]">
-              {activeGroups.map(g => (
-                <div key={g.id} className="p-6 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold">{g.name}</h3>
-                    <p className="text-sm text-gray-500">{g.members.length} miembros • Código: {g.inviteCode}</p>
+              {users.map(u => (
+                <div key={u.uid} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 transition-colors gap-3">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    {u.photoURL ? (
+                      <img src={u.photoURL} alt={u.displayName || ''} className="w-10 h-10 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-10 h-10 bg-gray-100 rounded-full flex-shrink-0 flex items-center justify-center text-gray-400">
+                        <User size={20} />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h3 className="font-bold truncate">{u.displayName || 'Usuario'}</h3>
+                      <p className="text-sm text-gray-500 truncate">{u.email}</p>
+                    </div>
                   </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase">Activo</span>
+                  <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                    <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase whitespace-nowrap ${u.status === 'blocked' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                      {u.status === 'blocked' ? 'Bloqueado' : 'Activo'}
+                    </span>
+                    {u.email !== 'kevinboteo@gmail.com' && (
+                      <button 
+                        onClick={() => toggleUserStatus(u.uid, u.status || 'active')}
+                        className={`p-2 rounded-xl transition-colors flex-shrink-0 ${u.status === 'blocked' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                        title={u.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+                      >
+                        {u.status === 'blocked' ? <Check size={18} /> : <X size={18} />}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1592,17 +2193,17 @@ function AdminPanel() {
                 </div>
               ) : (
                 notifications.map(n => (
-                  <div key={n.id} className="p-6 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold uppercase text-[#5A5A40] bg-[#F0EFEA] px-2 py-0.5 rounded">
+                  <div key={n.id} className="p-4 sm:p-6 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] sm:text-xs font-bold uppercase text-[#5A5A40] bg-[#F0EFEA] px-2 py-0.5 rounded whitespace-nowrap">
                         {n.type === 'group_join' ? 'Unión a Grupo' : 'Notificación'}
                       </span>
-                      <span className="text-[10px] text-gray-400">
+                      <span className="text-[10px] text-gray-400 whitespace-nowrap">
                         {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'HH:mm') : ''}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-800">{n.message}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">Enviado a: {n.to}</p>
+                    <p className="text-sm font-medium text-gray-800 break-words">{n.message}</p>
+                    <p className="text-[10px] text-gray-400 mt-1 truncate">Enviado a: {n.to}</p>
                   </div>
                 ))
               )}
@@ -1672,6 +2273,10 @@ function AppContent() {
 
   if (!profile) {
     return <Landing />;
+  }
+
+  if (profile.status === 'blocked') {
+    return <BlockedScreen />;
   }
 
   if (group?.status === 'pending') {

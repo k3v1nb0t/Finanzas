@@ -11,9 +11,10 @@
         "photoURL": { "type": "string" },
         "groupId": { "type": "string", "description": "The ID of the budget group the user belongs to" },
         "role": { "type": "string", "enum": ["admin", "user"] },
+        "status": { "type": "string", "enum": ["active", "blocked"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "groupId", "role"]
+      "required": ["uid", "email", "groupId", "role", "status"]
     },
     "Group": {
       "title": "Group",
@@ -86,11 +87,14 @@
           "id": { "type": "string" },
           "groupId": { "type": "string" },
           "amount": { "type": "number" },
+          "type": { "type": "string", "enum": ["income", "expense"] },
           "category": { "type": "string" },
           "description": { "type": "string" },
           "dayOfMonth": { "type": "number" },
           "paymentMethod": { "type": "string", "enum": ["Efectivo", "Tarjeta", "Transferencia", "Otros"] },
           "active": { "type": "boolean" },
+          "endDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
+          "status": { "type": "string", "enum": ["active", "finished"] },
           "createdAt": { "type": "string", "format": "date-time" }
         },
         "required": ["id", "groupId", "amount", "category", "dayOfMonth", "paymentMethod"]

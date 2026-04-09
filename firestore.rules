@@ -51,7 +51,16 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.email == "kevinboteo@gmail.com";
+      return isAuthenticated() && 
+             request.auth.token.get('email', '') == "kevinboteo@gmail.com" && 
+             request.auth.token.get('email_verified', false) == true;
+    }
+
+    function isBlocked() {
+      return isAuthenticated() && 
+             !isAdmin() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') == 'blocked';
     }
 
     function isOwner(userId) {
@@ -60,7 +69,8 @@ service cloud.firestore {
 
     function isGroupMember(groupId) {
       return isAuthenticated() && 
-        (request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members);
+             exists(/databases/$(database)/documents/groups/$(groupId)) &&
+             (request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members);
     }
 
     function isValidEmail(email) {
@@ -74,28 +84,31 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && 
-        request.resource.data.keys().hasAll(['uid', 'email', 'groupId', 'role']) &&
+        request.resource.data.keys().hasAll(['uid', 'email', 'groupId', 'role', 'status']) &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.role == 'user' &&
+        request.resource.data.status == 'active' &&
         isValidEmail(request.resource.data.email);
       allow update: if (isOwner(userId) || isAdmin()) && 
+        !isBlocked() &&
         request.resource.data.uid == resource.data.uid &&
-        request.resource.data.email == resource.data.email;
+        request.resource.data.email == resource.data.email &&
+        (isAdmin() || request.resource.data.status == resource.data.status);
     }
 
     match /groups/{groupId} {
-      allow read: if isAuthenticated() && (
+      allow read: if isAuthenticated() && !isBlocked() && (
         isAdmin() || 
         resource.data.ownerId == request.auth.uid || 
         request.auth.uid in resource.data.members ||
         // Allow reading to check invite code during join
         (request.query.limit <= 1)
       );
-      allow create: if isAuthenticated() && 
+      allow create: if isAuthenticated() && !isBlocked() &&
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.members.hasAll([request.auth.uid]) &&
         request.resource.data.status == 'pending';
-      allow update: if isAuthenticated() && 
+      allow update: if isAuthenticated() && !isBlocked() &&
         (isAdmin() || resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members || 
         // Allow adding self to members list if not already there
         (request.resource.data.members.hasAll(resource.data.members) && 
@@ -104,28 +117,30 @@ service cloud.firestore {
     }
 
     match /groups/{groupId}/transactions/{transactionId} {
-      allow read: if isGroupMember(groupId) || isAdmin();
-      allow create: if isGroupMember(groupId) && 
+      allow read: if !isBlocked() && (isGroupMember(groupId) || isAdmin());
+      allow create: if !isBlocked() && isGroupMember(groupId) && 
         request.resource.data.userId == request.auth.uid &&
         request.resource.data.amount > 0 &&
         request.resource.data.type in ['income', 'expense'];
-      allow update: if isGroupMember(groupId) && 
+      allow update: if !isBlocked() && isGroupMember(groupId) && 
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId;
-      allow delete: if isGroupMember(groupId) && resource.data.userId == request.auth.uid;
+      allow delete: if !isBlocked() && isGroupMember(groupId) && resource.data.userId == request.auth.uid;
     }
 
     match /groups/{groupId}/recurringExpenses/{expenseId} {
-      allow read: if isGroupMember(groupId) || isAdmin();
-      allow create: if isGroupMember(groupId) && 
+      allow read: if !isBlocked() && (isGroupMember(groupId) || isAdmin());
+      allow create: if !isBlocked() && isGroupMember(groupId) && 
         request.resource.data.amount > 0 &&
+        request.resource.data.type in ['income', 'expense'] &&
         request.resource.data.dayOfMonth >= 1 && 
         request.resource.data.dayOfMonth <= 31;
-      allow update: if isGroupMember(groupId) && 
+      allow update: if !isBlocked() && isGroupMember(groupId) && 
         request.resource.data.amount > 0 &&
+        request.resource.data.type in ['income', 'expense'] &&
         request.resource.data.dayOfMonth >= 1 && 
         request.resource.data.dayOfMonth <= 31;
-      allow delete: if isGroupMember(groupId);
+      allow delete: if !isBlocked() && isGroupMember(groupId);
     }
 
     match /notifications/{notificationId} {
