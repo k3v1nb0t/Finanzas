@@ -1,5 +1,5 @@
 {
-  "name": "Finanza - Control de Presupuesto",
+  "name": "BudgetBuddy",
   "description": "Una aplicación completa para gestionar tu presupuesto personal o familiar con sincronización en tiempo real.",
   "requestFramePermissions": []
 }

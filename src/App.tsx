@@ -25,8 +25,18 @@ import {
   Banknote,
   Repeat,
   CalendarDays,
-  Play
+  Play,
+  Search,
+  Moon,
+  Sun,
+  PiggyBank,
+  Sparkles,
+  Brain,
+  ShieldCheck,
+  ShieldAlert,
+  Settings
 } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   collection, 
@@ -45,10 +55,10 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Transaction, CATEGORIES, TransactionType, Group, UserProfile, PaymentMethod, PAYMENT_METHODS, RecurringExpense } from './types';
+import { Transaction, CATEGORIES, TransactionType, Group, UserProfile, PaymentMethod, PAYMENT_METHODS, RecurringExpense, SavingsGoal } from './types';
 import { formatCurrency, cn } from './lib/utils';
 import { handleFirestoreError, OperationType } from './lib/firestore-errors';
-import { format, isLastDayOfMonth, parse } from 'date-fns';
+import { format, isLastDayOfMonth, parse, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 
@@ -68,14 +78,222 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 
+function FinancialAssistant({ transactions, group }: { transactions: Transaction[], group: Group | null }) {
+  const { toggleAISharing, profile } = useAuth();
+  const [analysis, setAnalysis] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const analyzeFinances = async () => {
+    if (!profile?.aiSharingEnabled) return;
+    setIsLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const monthsLookback = profile.aiMonthsLookback || 1;
+      const cutoffDate = subMonths(new Date(), monthsLookback);
+
+      const filteredTransactions = transactions.filter(t => {
+        const tDate = t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date);
+        return tDate >= cutoffDate;
+      });
+
+      const recentTransactions = filteredTransactions.slice(0, 50).map(t => ({
+        tipo: t.type,
+        categoria: t.category,
+        monto: t.amount,
+        descripcion: t.description,
+        fecha: format(t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date), 'dd/MM/yyyy')
+      }));
+
+      const prompt = `Actúa como un asesor financiero experto. Analiza los siguientes movimientos financieros de los últimos ${monthsLookback} mes(es) de un grupo/familia y proporciona:
+      1. Un resumen rápido de la situación.
+      2. 3 consejos específicos para ahorrar o mejorar la gestión.
+      3. Una observación sobre la categoría en la que más se gasta.
+      
+      IMPORTANTE: La fecha actual es ${format(new Date(), 'dd/MM/yyyy')}. 
+      Ten en cuenta que el mes de ${format(new Date(), 'MMMM', { locale: es })} aún está en curso (en ejecución), por lo que es normal que los gastos o ingresos parezcan bajos o incompletos para este mes. No lo trates como un mes cerrado.
+      
+      Responde en español, de forma amigable y motivadora. Usa formato Markdown.
+      
+      Movimientos:
+      ${JSON.stringify(recentTransactions, null, 2)}
+      
+      Presupuesto mensual total: ${group?.budget || 'No definido'}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
+
+      setAnalysis(response.text || 'No se pudo generar el análisis.');
+    } catch (error) {
+      console.error("AI Error:", error);
+      toast.error('Error al conectar con la IA');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!profile?.aiSharingEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/20 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400 mb-6">
+          <ShieldAlert size={40} />
+        </div>
+        <h2 className="text-2xl font-bold mb-4 dark:text-white">Privacidad de IA</h2>
+        <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">
+          Para utilizar el Asistente Financiero con IA, necesitamos tu permiso para procesar tus transacciones de forma segura y privada.
+        </p>
+        <button 
+          onClick={toggleAISharing}
+          className="bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors flex items-center gap-2"
+        >
+          <ShieldCheck size={20} />
+          Habilitar IA y Compartir Datos
+        </button>
+        <p className="mt-4 text-xs text-gray-400 dark:text-gray-500 max-w-xs">
+          Tus datos solo se envían a la IA para este análisis específico y no se utilizan para entrenar modelos externos.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-br from-[#5A5A40] to-[#3A3A20] rounded-[40px] p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+              <Sparkles size={24} />
+            </div>
+            <h2 className="text-2xl font-bold">Asistente Inteligente</h2>
+          </div>
+          <p className="text-white/80 max-w-md mb-6">
+            Analizo tus patrones de gasto para darte consejos personalizados y ayudarte a alcanzar tus metas.
+          </p>
+          <button 
+            onClick={analyzeFinances}
+            disabled={isLoading}
+            className="bg-white text-[#5A5A40] px-6 py-3 rounded-xl font-bold hover:bg-gray-100 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Brain size={18} />}
+            {isLoading ? 'Analizando...' : 'Generar Análisis Ahora'}
+          </button>
+        </div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl" />
+      </div>
+
+      {analysis && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-900 rounded-[40px] p-8 shadow-xl border border-[#E4E3E0] dark:border-gray-800"
+        >
+          <div className="prose dark:prose-invert max-w-none">
+            <div className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 leading-relaxed">
+              {analysis}
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function SettingsTab() {
+  const { profile, toggleAISharing, updateAISettings } = useAuth();
+  
+  return (
+    <div className="max-w-2xl mx-auto space-y-8">
+      <div className="bg-white dark:bg-gray-900 rounded-[40px] p-8 shadow-xl border border-[#E4E3E0] dark:border-gray-800">
+        <h2 className="text-2xl font-bold mb-6 dark:text-white flex items-center gap-2">
+          <Settings size={24} className="text-[#5A5A40] dark:text-[#8B8B6B]" />
+          Configuración
+        </h2>
+        
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border border-transparent hover:border-[#5A5A40]/30 transition-all">
+            <div className="flex gap-4">
+              <div className="p-3 bg-amber-100 dark:bg-amber-900/20 rounded-2xl text-amber-600 dark:text-amber-400 h-fit">
+                <Brain size={24} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold dark:text-white">Análisis con IA</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Permitir que la IA analice tus transacciones para darte consejos.</p>
+              </div>
+            </div>
+            <button 
+              onClick={toggleAISharing}
+              className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 flex-shrink-0 ${profile?.aiSharingEnabled ? 'bg-[#5A5A40]' : 'bg-gray-300 dark:bg-gray-700'}`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${profile?.aiSharingEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {profile?.aiSharingEnabled && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="p-6 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border border-transparent"
+            >
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-2 text-[#5A5A40] dark:text-[#8B8B6B]">
+                  <CalendarDays size={20} />
+                  <h3 className="font-bold">Historial de Análisis</h3>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">¿Cuántos meses atrás quieres que la IA analice?</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[1, 3, 6].map((months) => (
+                    <button
+                      key={months}
+                      onClick={() => updateAISettings(months)}
+                      className={cn(
+                        "py-3 rounded-2xl font-bold transition-all border-2",
+                        (profile.aiMonthsLookback || 1) === months
+                          ? "bg-[#5A5A40] border-[#5A5A40] text-white shadow-lg"
+                          : "bg-white dark:bg-gray-900 border-[#E4E3E0] dark:border-gray-800 text-gray-500 hover:border-[#5A5A40]/30"
+                      )}
+                    >
+                      {months} {months === 1 ? 'Mes' : 'Meses'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
-  const { user, profile, group, groups, logout, isAdmin, viewMode, setViewMode, switchGroup, createGroup, joinGroup } = useAuth();
+  const { 
+    user, 
+    profile, 
+    group, 
+    groups, 
+    logout, 
+    isAdmin, 
+    viewMode, 
+    setViewMode, 
+    switchGroup, 
+    createGroup, 
+    joinGroup, 
+    isSwitching,
+    isDarkMode,
+    setIsDarkMode,
+    toggleAISharing
+  } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [memberProfiles, setMemberProfiles] = useState<Record<string, UserProfile>>({});
   const [isAdding, setIsAdding] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'group' | 'recurring'>('dashboard');
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'group' | 'recurring' | 'goals' | 'ai' | 'settings'>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form state
   const [amount, setAmount] = useState('');
@@ -88,6 +306,13 @@ function Dashboard() {
   const [description, setDescription] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Efectivo');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  // Goal Form State
+  const [goalName, setGoalName] = useState('');
+  const [goalTarget, setGoalTarget] = useState('');
+  const [goalCurrent, setGoalCurrent] = useState('');
+  const [goalDeadline, setGoalDeadline] = useState('');
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
   // Recurring state
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
@@ -102,6 +327,35 @@ function Dashboard() {
   const [newGroupName, setNewGroupName] = useState('');
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [isGroupActionLoading, setIsGroupActionLoading] = useState(false);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const [isGroupSelectorOpen, setIsGroupSelectorOpen] = useState(false);
+
+  // Close group selector when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.group-selector')) {
+        setIsGroupSelectorOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch member profiles
   useEffect(() => {
@@ -163,7 +417,7 @@ function Dashboard() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `FamiCash_Historial_Completo_${group.name}.csv`);
+    link.setAttribute("download", `BudgetBuddy_Historial_Completo_${group.name}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -180,7 +434,7 @@ function Dashboard() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "FamiCash_Plantilla_Presupuesto.csv");
+    link.setAttribute("download", "BudgetBuddy_Plantilla_Presupuesto.csv");
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -340,12 +594,38 @@ function Dashboard() {
     processExpenses();
   }, [profile?.groupId, user, recurringExpenses, transactions, hasProcessedRecurring]);
 
+  // Real-time savings goals listener
+  useEffect(() => {
+    if (!profile?.groupId) return;
+    const q = query(
+      collection(db, 'groups', profile.groupId, 'savingsGoals'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const goalsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavingsGoal));
+      setSavingsGoals(goalsList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/savingsGoals`);
+    });
+    return unsubscribe;
+  }, [profile?.groupId]);
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-      return formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
+      const isMonthMatch = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
+      
+      if (!searchQuery) return isMonthMatch;
+      
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = 
+        (t.description || '').toLowerCase().includes(searchLower) ||
+        (t.category || '').toLowerCase().includes(searchLower) ||
+        (t.userName || '').toLowerCase().includes(searchLower);
+        
+      return isMonthMatch && matchesSearch;
     });
-  }, [transactions, selectedMonth]);
+  }, [transactions, selectedMonth, searchQuery]);
 
   const paymentMethodStats = useMemo(() => {
     const methods: Record<string, number> = {};
@@ -439,10 +719,8 @@ function Dashboard() {
     if (!profile?.groupId || !user) return;
 
     try {
-      const data = {
+      const commonData = {
         groupId: profile.groupId,
-        userId: user.uid,
-        userName: user.displayName || 'Usuario',
         amount: parseFloat(amount),
         type,
         category,
@@ -453,11 +731,13 @@ function Dashboard() {
       };
 
       if (editingTransactionId) {
-        await setDoc(doc(db, 'groups', profile.groupId, 'transactions', editingTransactionId), data, { merge: true });
+        await setDoc(doc(db, 'groups', profile.groupId, 'transactions', editingTransactionId), commonData, { merge: true });
         toast.success('Transacción actualizada');
       } else {
         await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), {
-          ...data,
+          ...commonData,
+          userId: user.uid,
+          userName: user.displayName || 'Usuario',
           createdAt: serverTimestamp(),
         });
         toast.success('Transacción agregada');
@@ -465,10 +745,12 @@ function Dashboard() {
 
       setIsAdding(false);
       setEditingTransactionId(null);
+      setEditingRecurringId(null);
       setAmount('');
       setCategory('');
       setDescription('');
       setIsRecurring(false);
+      setDate(format(new Date(), 'yyyy-MM-dd'));
     } catch (error) {
       handleFirestoreError(error, editingTransactionId ? OperationType.UPDATE : OperationType.WRITE, `groups/${profile.groupId}/transactions`);
     }
@@ -558,12 +840,21 @@ function Dashboard() {
 
   const handleDeleteRecurring = async (id: string) => {
     if (!profile?.groupId) return;
-    try {
-      await deleteDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', id));
-      toast.success('Gasto fijo eliminado');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `groups/${profile.groupId}/recurringExpenses/${id}`);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Gasto Fijo',
+      message: '¿Estás seguro de que deseas eliminar este gasto fijo? Ya no se generarán transacciones automáticas.',
+      isDanger: true,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', id));
+          toast.success('Gasto fijo eliminado');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `groups/${profile.groupId}/recurringExpenses/${id}`);
+        }
+      }
+    });
   };
 
   const handleUpdateBudget = async (e: FormEvent) => {
@@ -623,12 +914,161 @@ function Dashboard() {
 
   const handleDelete = async (id: string) => {
     if (!profile?.groupId) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Transacción',
+      message: '¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede deshacer.',
+      isDanger: true,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'groups', profile.groupId, 'transactions', id));
+          toast.success('Transacción eliminada');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `groups/${profile.groupId}/transactions/${id}`);
+        }
+      }
+    });
+  };
+
+  const handleSaveGoal = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!profile?.groupId || !goalName || !goalTarget) return;
+
+    const goalData: Partial<SavingsGoal> = {
+      name: goalName,
+      targetAmount: parseFloat(goalTarget),
+      currentAmount: parseFloat(goalCurrent) || 0,
+      deadline: goalDeadline || undefined,
+      groupId: profile.groupId,
+      createdAt: serverTimestamp()
+    };
+
     try {
-      await deleteDoc(doc(db, 'groups', profile.groupId, 'transactions', id));
-      toast.success('Transacción eliminada');
+      if (editingGoalId) {
+        await setDoc(doc(db, 'groups', profile.groupId, 'savingsGoals', editingGoalId), goalData, { merge: true });
+        toast.success('Meta actualizada');
+      } else {
+        await addDoc(collection(db, 'groups', profile.groupId, 'savingsGoals'), goalData);
+        toast.success('Meta creada');
+      }
+      setIsGoalModalOpen(false);
+      setEditingGoalId(null);
+      setGoalName('');
+      setGoalTarget('');
+      setGoalCurrent('');
+      setGoalDeadline('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `groups/${profile.groupId}/transactions/${id}`);
+      handleFirestoreError(error, OperationType.WRITE, `groups/${profile.groupId}/savingsGoals`);
     }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!profile?.groupId) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Meta',
+      message: '¿Estás seguro de que deseas eliminar esta meta de ahorro?',
+      isDanger: true,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'groups', profile.groupId, 'savingsGoals', goalId));
+          toast.success('Meta eliminada');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `groups/${profile.groupId}/savingsGoals/${goalId}`);
+        }
+      }
+    });
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!group || !profile || group.ownerId !== user?.uid) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Grupo',
+      message: `¿Estás seguro de que deseas eliminar el grupo "${group.name}"? Se eliminarán todos los datos permanentemente.`,
+      isDanger: true,
+      confirmText: 'Eliminar Grupo',
+      onConfirm: async () => {
+        try {
+          // 1. Delete all transactions
+          const txsSnapshot = await getDocs(collection(db, 'groups', group.id, 'transactions'));
+          const batch = writeBatch(db);
+          txsSnapshot.forEach(d => batch.delete(d.ref));
+          
+          // 2. Delete all recurring expenses
+          const recSnapshot = await getDocs(collection(db, 'groups', group.id, 'recurringExpenses'));
+          recSnapshot.forEach(d => batch.delete(d.ref));
+          
+          // 3. Delete the group itself
+          batch.delete(doc(db, 'groups', group.id));
+          
+          await batch.commit();
+
+          // 4. Update all members' profiles
+          for (const memberId of group.members) {
+            const memberDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', memberId)));
+            if (!memberDoc.empty) {
+              const mData = memberDoc.docs[0].data() as UserProfile;
+              const newGroupIds = (mData.groupIds || []).filter(id => id !== group.id);
+              const nextGroupId = newGroupIds.length > 0 ? newGroupIds[0] : '';
+              
+              await setDoc(memberDoc.docs[0].ref, {
+                groupId: nextGroupId,
+                groupIds: newGroupIds
+              }, { merge: true });
+            }
+          }
+
+          toast.success('Grupo eliminado correctamente');
+          setActiveTab('dashboard');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `groups/${group.id}`);
+        }
+      }
+    });
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (!group || group.ownerId !== user?.uid) return;
+    if (memberId === user.uid) {
+      toast.error('No puedes eliminarte a ti mismo. Elimina el grupo si deseas salir.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Miembro',
+      message: '¿Estás seguro de que deseas eliminar a este miembro del grupo?',
+      isDanger: true,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          const newMembers = group.members.filter(id => id !== memberId);
+          await setDoc(doc(db, 'groups', group.id), { members: newMembers }, { merge: true });
+          
+          // Update member's profile
+          const memberDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', memberId)));
+          if (!memberDoc.empty) {
+            const mData = memberDoc.docs[0].data() as UserProfile;
+            const newGroupIds = (mData.groupIds || []).filter(id => id !== group.id);
+            const nextGroupId = mData.groupId === group.id ? (newGroupIds.length > 0 ? newGroupIds[0] : '') : mData.groupId;
+            
+            await setDoc(memberDoc.docs[0].ref, {
+              groupId: nextGroupId,
+              groupIds: newGroupIds
+            }, { merge: true });
+          }
+
+          toast.success('Miembro eliminado del grupo');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `groups/${group.id}`);
+        }
+      }
+    });
   };
 
   if (profile?.status === 'blocked') {
@@ -656,39 +1096,121 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-gray-950 text-[#1A1A1A] dark:text-gray-100 font-sans relative transition-colors duration-300">
+      {/* Switching Overlay */}
+      <AnimatePresence>
+        {isSwitching && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-white/40 backdrop-blur-md flex flex-col items-center justify-center"
+          >
+            <div className="w-16 h-16 bg-[#5A5A40] rounded-2xl flex items-center justify-center text-white shadow-2xl mb-4">
+              <Loader2 size={32} className="animate-spin" />
+            </div>
+            <p className="text-xs font-bold text-[#5A5A40] uppercase tracking-[0.3em] animate-pulse">Cambiando Presupuesto...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-[#E4E3E0] z-40 px-4 py-3">
+      <header className="sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-[#E4E3E0] dark:border-gray-800 z-40 px-4 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#5A5A40]/20">
               <Wallet size={24} />
             </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold tracking-tight leading-tight">FamiCash</h1>
-              {groups.length > 1 ? (
-                <select 
-                  value={profile?.groupId || ''} 
-                  onChange={(e) => switchGroup(e.target.value)}
-                  className="bg-transparent border-none p-0 text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest focus:ring-0 cursor-pointer hover:underline"
-                >
-                  {groups.map(g => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest">{group?.name || 'Cargando...'}</p>
-              )}
+            <div className="flex flex-col group-selector relative">
+              <h1 className="text-lg font-bold tracking-tight leading-tight dark:text-white">BudgetBuddy</h1>
+              <button 
+                onClick={() => setIsGroupSelectorOpen(!isGroupSelectorOpen)}
+                className="flex items-center gap-1 text-[10px] font-bold text-[#5A5A40] dark:text-[#8B8B6B] uppercase tracking-widest hover:underline transition-all"
+              >
+                <span>{group?.name || 'Cargando...'}</span>
+                <Plus size={10} className={cn("transition-transform duration-300", isGroupSelectorOpen ? "rotate-45" : "")} />
+              </button>
+
+              <AnimatePresence>
+                {isGroupSelectorOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden z-50"
+                  >
+                    <div className="p-2 border-b border-gray-50 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
+                      <p className="px-3 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Mis Presupuestos</p>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1">
+                      {groups.map(g => (
+                        <button
+                          key={g.id}
+                          onClick={() => {
+                            switchGroup(g.id);
+                            setIsGroupSelectorOpen(false);
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-bold transition-all",
+                            profile?.groupId === g.id 
+                              ? "bg-[#5A5A40] dark:bg-[#8B8B6B] text-white shadow-md" 
+                              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-lg flex items-center justify-center",
+                              profile?.groupId === g.id ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"
+                            )}>
+                              <Users size={16} />
+                            </div>
+                            <span className="truncate max-w-[120px]">{g.name}</span>
+                          </div>
+                          {profile?.groupId === g.id && <Check size={16} />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-1 border-t border-gray-50 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
+                      <button 
+                        onClick={() => {
+                          setGroupAction('create');
+                          setIsGroupModalOpen(true);
+                          setIsGroupSelectorOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center border border-[#E4E3E0] dark:border-gray-800">
+                          <Plus size={16} />
+                        </div>
+                        <span>Crear nuevo grupo</span>
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setGroupAction('join');
+                          setIsGroupModalOpen(true);
+                          setIsGroupSelectorOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center border border-[#E4E3E0] dark:border-gray-800">
+                          <ArrowDownRight size={16} />
+                        </div>
+                        <span>Unirse a un grupo</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center bg-gray-100 rounded-xl p-1">
+            <div className="hidden sm:flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
               <input 
                 type="month" 
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold text-[#5A5A40] focus:ring-0 py-1"
+                className="bg-transparent border-none text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-0 py-1"
               />
             </div>
             {isAdmin && (
@@ -698,7 +1220,7 @@ function Dashboard() {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
                   viewMode === 'admin' 
                     ? "bg-[#5A5A40] text-white shadow-md" 
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
                 )}
               >
                 <LayoutDashboard size={14} />
@@ -706,8 +1228,15 @@ function Dashboard() {
               </button>
             )}
             <button 
+              onClick={() => setIsDarkMode(prev => !prev)}
+              className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl transition-all"
+              title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <button 
               onClick={logout}
-              className="w-10 h-10 flex items-center justify-center bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+              className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
             >
               <LogOut size={20} />
             </button>
@@ -715,14 +1244,17 @@ function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 pt-6 pb-32">
+      <main className={cn(
+        "max-w-5xl mx-auto px-4 pt-6 pb-32 transition-all duration-500",
+        isSwitching ? "blur-xl scale-[0.98] opacity-50" : "blur-0 scale-100 opacity-100"
+      )}>
         <div className="sm:hidden mb-6">
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Mes Seleccionado</label>
           <input 
             type="month" 
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="w-full bg-white border border-[#E4E3E0] rounded-2xl py-3 px-4 text-sm font-bold text-[#5A5A40] focus:ring-2 focus:ring-[#5A5A40]"
+            className="w-full bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-2xl py-3 px-4 text-sm font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-2 focus:ring-[#5A5A40]"
           />
         </div>
 
@@ -737,7 +1269,7 @@ function Dashboard() {
             >
               {/* Balance Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] relative overflow-hidden group">
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
                     <Wallet size={48} />
                   </div>
@@ -746,33 +1278,33 @@ function Dashboard() {
                 </div>
                 
                 <div className="grid grid-cols-2 sm:contents gap-4">
-                  <div className="bg-white p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] flex flex-col justify-between gap-2">
-                    <div className="w-8 h-8 bg-green-50 text-green-600 rounded-xl flex items-center justify-center">
+                  <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex flex-col justify-between gap-2">
+                    <div className="w-8 h-8 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
                       <TrendingUp size={18} />
                     </div>
                     <div>
                       <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Ingresos</p>
-                      <p className="text-lg font-bold text-green-600">{formatCurrency(stats.income)}</p>
+                      <p className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(stats.income)}</p>
                     </div>
                   </div>
                   
-                  <div className="bg-white p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] flex flex-col justify-between gap-2">
-                    <div className="w-8 h-8 bg-red-50 text-red-600 rounded-xl flex items-center justify-center">
+                  <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex flex-col justify-between gap-2">
+                    <div className="w-8 h-8 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl flex items-center justify-center">
                       <TrendingDown size={18} />
                     </div>
                     <div>
                       <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Gastos</p>
-                      <p className="text-lg font-bold text-red-600">{formatCurrency(stats.expense)}</p>
+                      <p className="text-lg font-bold text-red-600 dark:text-red-400">{formatCurrency(stats.expense)}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Budget Progress Card */}
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
+              <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
                 <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 bg-[#5A5A40]/10 text-[#5A5A40] rounded-xl flex items-center justify-center">
+                    <div className="w-10 h-10 bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] rounded-xl flex items-center justify-center">
                       <Target size={20} />
                     </div>
                     <div>
@@ -814,16 +1346,16 @@ function Dashboard() {
                       </div>
                       <p className="text-sm font-bold text-gray-500">{Math.round((stats.expense / group.budget) * 100)}%</p>
                     </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${budgetProgress?.percentage}%` }}
-                        className={cn(
-                          "h-full rounded-full transition-all duration-500",
-                          budgetProgress?.isOver ? "bg-red-500" : "bg-[#5A5A40]"
-                        )}
-                      />
-                    </div>
+                  <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${budgetProgress?.percentage}%` }}
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        budgetProgress?.isOver ? "bg-red-500" : "bg-[#5A5A40] dark:bg-[#8B8B6B]"
+                      )}
+                    />
+                  </div>
                   </div>
                 ) : (
                   <div className="py-4 text-center">
@@ -856,7 +1388,7 @@ function Dashboard() {
                             <p className="text-sm font-bold text-gray-700">{item.category}</p>
                             <p className="text-xs font-bold text-gray-400">{Math.round((item.spent / item.budget) * 100)}%</p>
                           </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                             <motion.div 
                               initial={{ width: 0 }}
                               animate={{ width: `${item.percentage}%` }}
@@ -883,20 +1415,26 @@ function Dashboard() {
 
               {/* Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
+                <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
                   <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
                     <TrendingUp size={20} className="text-gray-400" />
-                    Actividad Semanal
+                    Actividad Mensual
                   </h3>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F0F0" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#999' }} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#374151" : "#F0F0F0"} />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: isDarkMode ? '#6B7280' : '#999' }} />
                         <YAxis hide />
                         <Tooltip 
-                          cursor={{ fill: '#F5F5F0' }}
-                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                          cursor={{ fill: isDarkMode ? '#1F2937' : '#F5F5F0' }}
+                          contentStyle={{ 
+                            borderRadius: '12px', 
+                            border: 'none', 
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                            backgroundColor: isDarkMode ? '#111827' : '#FFFFFF',
+                            color: isDarkMode ? '#FFFFFF' : '#000000'
+                          }}
                         />
                         <Bar dataKey="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
                         <Bar dataKey="Gastos" fill="#EF4444" radius={[4, 4, 0, 0]} barSize={20} />
@@ -905,7 +1443,7 @@ function Dashboard() {
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
+                <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
                   <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
                     <PieChart size={20} className="text-gray-400" />
                     Gastos por Categoría
@@ -932,7 +1470,7 @@ function Dashboard() {
               </div>
 
               {/* Payment Methods Summary */}
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
+              <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
                 <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
                   <CreditCard size={20} className="text-gray-400" />
                   Cuadre por Forma de Pago
@@ -941,9 +1479,9 @@ function Dashboard() {
                   {PAYMENT_METHODS.map(method => {
                     const amount = paymentMethodStats.find(s => s.name === method)?.value || 0;
                     return (
-                      <div key={method} className="bg-[#F5F5F0] p-4 rounded-2xl">
+                      <div key={method} className="bg-[#F5F5F0] dark:bg-gray-800 p-4 rounded-2xl">
                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">{method}</p>
-                        <p className="text-lg font-black text-[#5A5A40]">{formatCurrency(amount)}</p>
+                        <p className="text-lg font-black text-[#5A5A40] dark:text-[#8B8B6B]">{formatCurrency(amount)}</p>
                       </div>
                     );
                   })}
@@ -951,8 +1489,8 @@ function Dashboard() {
               </div>
 
               {/* Recent Transactions */}
-              <div className="bg-white rounded-3xl shadow-sm border border-[#E4E3E0] overflow-hidden">
-                <div className="p-6 border-b border-[#E4E3E0] flex items-center justify-between">
+              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+                <div className="p-6 border-b border-[#E4E3E0] dark:border-gray-800 flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Transacciones Recientes</h3>
                   <button 
                     onClick={() => setActiveTab('history')}
@@ -963,11 +1501,11 @@ function Dashboard() {
                 </div>
                 <div className="divide-y divide-[#E4E3E0]">
                   {filteredTransactions.slice(0, 5).map((tx) => (
-                    <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                    <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                       <div className="flex items-center gap-4">
                         <div className={cn(
                           "w-10 h-10 rounded-full flex items-center justify-center",
-                          tx.type === 'income' ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+                          tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
                         )}>
                           {tx.type === 'income' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
                         </div>
@@ -1011,30 +1549,45 @@ function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <h2 className="text-2xl font-bold">Historial del Mes</h2>
-                <button 
-                  onClick={exportToCSV}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E4E3E0] rounded-xl text-xs font-bold text-[#5A5A40] hover:bg-gray-50 transition-colors"
-                >
-                  <ArrowDownRight size={14} />
-                  Exportar CSV
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input 
+                      type="text"
+                      placeholder="Buscar descripción..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-[#5A5A40] outline-none transition-all dark:text-white"
+                    />
+                  </div>
+                  <button 
+                    onClick={exportToCSV}
+                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <ArrowDownRight size={14} />
+                    Exportar CSV
+                  </button>
+                </div>
               </div>
-              <div className="bg-white rounded-3xl shadow-sm border border-[#E4E3E0] overflow-hidden">
-                <div className="divide-y divide-[#E4E3E0]">
+              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+                <div className="divide-y divide-[#E4E3E0] dark:divide-gray-800">
                   {filteredTransactions.map((tx) => (
-                    <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 group gap-2 sm:gap-3">
+                    <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 group gap-2 sm:gap-3">
                       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                         <div className={cn(
                           "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex-shrink-0 flex items-center justify-center",
-                          tx.type === 'income' ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+                          tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
                         )}>
                           {tx.type === 'income' ? <ArrowUpRight size={18} className="sm:w-5 sm:h-5" /> : <ArrowDownRight size={18} className="sm:w-5 sm:h-5" />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="font-medium text-sm sm:text-base">{tx.description || tx.category}</p>
+                            <p className="font-medium text-sm sm:text-base truncate">{tx.description || tx.category}</p>
+                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded">
+                              {tx.category}
+                            </span>
                             {tx.isRecurring && (
                               <span className="bg-[#5A5A40]/10 text-[#5A5A40] text-[7px] sm:text-[8px] font-black uppercase px-1 py-0.5 rounded tracking-tighter flex-shrink-0 flex items-center gap-0.5">
                                 <Repeat size={7} className="sm:w-2 sm:h-2" /> Fijo
@@ -1056,23 +1609,25 @@ function Dashboard() {
                           {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                         </p>
                         <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                          <button 
-                            onClick={() => {
-                              setEditingTransactionId(tx.id);
-                              setAmount(tx.amount.toString());
-                              setType(tx.type);
-                              setCategory(tx.category);
-                              setDescription(tx.description || '');
-                              setPaymentMethod(tx.paymentMethod || 'Efectivo');
-                              setDate(formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'yyyy-MM-dd'));
-                              setIsAdding(true);
-                              setIsRecurring(false);
-                            }}
-                            className="p-1.5 sm:p-2 text-gray-300 hover:text-[#5A5A40]"
-                          >
-                            <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" />
-                          </button>
-                          {tx.userId === user?.uid && (
+                          {(tx.userId === user?.uid || isAdmin) && (
+                            <button 
+                              onClick={() => {
+                                setEditingTransactionId(tx.id);
+                                setAmount(tx.amount.toString());
+                                setType(tx.type);
+                                setCategory(tx.category);
+                                setDescription(tx.description || '');
+                                setPaymentMethod(tx.paymentMethod || 'Efectivo');
+                                setDate(formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'yyyy-MM-dd'));
+                                setIsAdding(true);
+                                setIsRecurring(false);
+                              }}
+                              className="p-1.5 sm:p-2 text-gray-300 hover:text-[#5A5A40]"
+                            >
+                              <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" />
+                            </button>
+                          )}
+                          {(tx.userId === user?.uid || isAdmin) && (
                             <button 
                               onClick={() => handleDelete(tx.id)}
                               className="p-1.5 sm:p-2 text-gray-300 hover:text-red-500"
@@ -1102,15 +1657,22 @@ function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-8"
             >
-              <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#E4E3E0]">
-                <h2 className="text-2xl font-bold mb-2">{group?.name}</h2>
-                <p className="text-gray-500 mb-6">Gestiona los miembros de tu familia o grupo.</p>
+              <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold dark:text-white">{group?.name}</h2>
+                    <p className="text-gray-500 dark:text-gray-400">Gestiona los miembros de tu familia o grupo.</p>
+                  </div>
+                  <div className="bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10 text-[#5A5A40] dark:text-[#8B8B6B] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                    {group?.ownerId === user?.uid ? 'Propietario' : 'Miembro'}
+                  </div>
+                </div>
                 
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
-                  <div className="w-full sm:w-auto flex items-center gap-3 p-4 bg-[#F5F5F0] rounded-2xl border border-[#E4E3E0]">
+                  <div className="w-full sm:w-auto flex items-center gap-3 p-4 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl border border-[#E4E3E0] dark:border-gray-700">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]">Código de Invitación</p>
-                      <p className="text-xl font-mono font-bold">{group?.inviteCode}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] dark:text-[#8B8B6B]">Código de Invitación</p>
+                      <p className="text-xl font-mono font-bold dark:text-white">{group?.inviteCode}</p>
                     </div>
                     <button 
                       onClick={() => {
@@ -1119,7 +1681,7 @@ function Dashboard() {
                         navigator.clipboard.writeText(message);
                         toast.success('Invitación copiada');
                       }}
-                      className="ml-auto p-2 bg-white rounded-xl shadow-sm border border-[#E4E3E0] hover:bg-gray-50 transition-colors"
+                      className="ml-auto p-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
                     >
                       <Plus size={18} className="rotate-45" />
                     </button>
@@ -1131,7 +1693,7 @@ function Dashboard() {
                         setGroupAction('create');
                         setIsGroupModalOpen(true);
                       }}
-                      className="flex-1 sm:flex-none bg-[#5A5A40] text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-[#4A4A30] transition-colors"
+                      className="flex-1 sm:flex-none bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-[#4A4A30] dark:hover:bg-[#7A7A5B] transition-colors"
                     >
                       Nuevo Grupo
                     </button>
@@ -1140,14 +1702,14 @@ function Dashboard() {
                         setGroupAction('join');
                         setIsGroupModalOpen(true);
                       }}
-                      className="flex-1 sm:flex-none bg-white text-[#5A5A40] border border-[#E4E3E0] px-4 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors"
+                      className="flex-1 sm:flex-none bg-white dark:bg-gray-900 text-[#5A5A40] dark:text-[#8B8B6B] border border-[#E4E3E0] dark:border-gray-800 px-4 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
                       Unirse a Grupo
                     </button>
                   </div>
                 </div>
 
-                <h3 className="font-semibold mb-4">Miembros ({group?.members.length})</h3>
+                <h3 className="font-semibold mb-4 dark:text-white">Miembros ({group?.members.length})</h3>
                 <div className="space-y-4">
                   {group?.members.map((memberId) => {
                     const memberProfile = memberProfiles[memberId];
@@ -1159,24 +1721,170 @@ function Dashboard() {
                           <img 
                             src={memberProfile.photoURL} 
                             alt={displayName} 
-                            className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                            className="w-10 h-10 rounded-full object-cover border border-gray-100 dark:border-gray-800"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold">
+                          <div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 font-bold">
                             {displayName.substring(0, 2).toUpperCase()}
                           </div>
                         )}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate dark:text-white">
                             {memberId === user?.uid ? `${displayName} (Tú)` : displayName}
                           </p>
-                          <p className="text-xs text-gray-400">{memberId === group.ownerId ? 'Propietario' : 'Colaborador'}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">{memberId === group.ownerId ? 'Propietario' : 'Colaborador'}</p>
                         </div>
+                        {group.ownerId === user?.uid && memberId !== user?.uid && (
+                          <button 
+                            onClick={() => handleRemoveMember(memberId)}
+                            className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                            title="Eliminar miembro"
+                          >
+                            <User size={18} className="text-red-400" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
+
+                {group?.ownerId === user?.uid && (
+                  <div className="mt-12 pt-8 border-t border-red-50 dark:border-red-900/20">
+                    <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest mb-4">Zona de Peligro</h4>
+                    <button 
+                      onClick={handleDeleteGroup}
+                      className="w-full flex items-center justify-center gap-2 py-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                    >
+                      <Trash2 size={20} />
+                      Eliminar este Grupo Permanentemente
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {groups.length > 1 && (
+                <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+                  <h3 className="text-lg font-bold mb-4 dark:text-white">Mis Otros Presupuestos</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {groups.filter(g => g.id !== profile?.groupId).map(g => (
+                      <button
+                        key={g.id}
+                        onClick={() => switchGroup(g.id)}
+                        className="flex items-center justify-between p-4 rounded-2xl border border-[#E4E3E0] dark:border-gray-800 hover:border-[#5A5A40] dark:hover:border-[#8B8B6B] hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-[#5A5A40] dark:text-[#8B8B6B]">
+                            <Users size={20} />
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm dark:text-white">{g.name}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                              {g.ownerId === user?.uid ? 'Propietario' : 'Miembro'}
+                            </p>
+                          </div>
+                        </div>
+                        <ArrowUpRight size={16} className="text-gray-300 dark:text-gray-600" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+          {activeTab === 'goals' && (
+            <motion.div 
+              key="goals"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight">Metas de Ahorro</h2>
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Tus objetivos financieros</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setEditingGoalId(null);
+                    setGoalName('');
+                    setGoalTarget('');
+                    setGoalCurrent('');
+                    setGoalDeadline('');
+                    setIsGoalModalOpen(true);
+                  }}
+                  className="bg-[#5A5A40] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md"
+                >
+                  Nueva Meta
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {savingsGoals.map((goal) => {
+                  const progress = Math.min(Math.round((goal.currentAmount / goal.targetAmount) * 100), 100);
+                  return (
+                    <div key={goal.id} className="bg-white dark:bg-gray-900 p-6 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                            <PiggyBank size={24} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold">{goal.name}</h3>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                              {goal.deadline ? `Meta: ${goal.deadline}` : 'Sin fecha límite'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center">
+                          <button 
+                            onClick={() => {
+                              setEditingGoalId(goal.id);
+                              setGoalName(goal.name);
+                              setGoalTarget(goal.targetAmount.toString());
+                              setGoalCurrent(goal.currentAmount.toString());
+                              setGoalDeadline(goal.deadline || '');
+                              setIsGoalModalOpen(true);
+                            }}
+                            className="p-2 text-gray-300 hover:text-[#5A5A40]"
+                          >
+                            <Pencil size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteGoal(goal.id)}
+                            className="p-2 text-gray-300 hover:text-red-500"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-end">
+                          <p className="text-lg font-black text-[#5A5A40]">
+                            {formatCurrency(goal.currentAmount)}
+                            <span className="text-xs font-bold text-gray-400 ml-1">/ {formatCurrency(goal.targetAmount)}</span>
+                          </p>
+                          <p className="text-sm font-black text-gray-400">{progress}%</p>
+                        </div>
+                        <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            className="h-full bg-amber-500 rounded-full"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {savingsGoals.length === 0 && (
+                  <div className="sm:col-span-2 bg-white dark:bg-gray-900 p-12 rounded-[32px] border border-dashed border-gray-300 dark:border-gray-700 text-center">
+                    <Target size={48} className="mx-auto text-gray-200 dark:text-gray-800 mb-4" />
+                    <p className="text-gray-400 font-medium">No tienes metas de ahorro configuradas.</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -1206,9 +1914,9 @@ function Dashboard() {
 
               <div className="grid grid-cols-1 gap-4">
                 {recurringExpenses.map((re) => (
-                  <div key={re.id} className="bg-white p-4 sm:p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] flex items-center justify-between gap-3">
+                  <div key={re.id} className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F0] rounded-2xl flex-shrink-0 flex items-center justify-center text-[#5A5A40]">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl flex-shrink-0 flex items-center justify-center text-[#5A5A40] dark:text-[#8B8B6B]">
                         <CalendarDays size={20} className="sm:w-6 sm:h-6" />
                       </div>
                       <div className="min-w-0">
@@ -1278,11 +1986,31 @@ function Dashboard() {
               </div>
             </motion.div>
           )}
+          {activeTab === 'ai' && (
+            <motion.div 
+              key="ai"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <FinancialAssistant transactions={transactions} group={group} />
+            </motion.div>
+          )}
+          {activeTab === 'settings' && (
+            <motion.div 
+              key="settings"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <SettingsTab />
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-[#E4E3E0] px-6 py-3 pb-8 z-30">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg border-t border-[#E4E3E0] dark:border-gray-800 px-6 py-3 pb-8 z-30">
         <div className="max-w-md mx-auto flex items-center justify-between relative">
           <button 
             onClick={() => setActiveTab('dashboard')}
@@ -1304,16 +2032,48 @@ function Dashboard() {
             onClick={() => setActiveTab('history')}
             className={cn(
               "flex flex-col items-center gap-1.5 transition-all duration-300",
-              activeTab === 'history' ? "text-[#5A5A40] scale-110" : "text-gray-400"
+              activeTab === 'history' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
             )}
           >
             <div className={cn(
               "p-1 rounded-xl transition-colors",
-              activeTab === 'history' ? "bg-[#5A5A40]/10" : ""
+              activeTab === 'history' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
             )}>
               <History size={22} />
             </div>
             <span className="text-[9px] font-black uppercase tracking-widest">Historial</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('goals')}
+            className={cn(
+              "flex flex-col items-center gap-1.5 transition-all duration-300",
+              activeTab === 'goals' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
+            )}
+          >
+            <div className={cn(
+              "p-1 rounded-xl transition-colors",
+              activeTab === 'goals' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
+            )}>
+              <Target size={22} />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest">Metas</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('recurring')}
+            className={cn(
+              "flex flex-col items-center gap-1.5 transition-all duration-300",
+              activeTab === 'recurring' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
+            )}
+          >
+            <div className={cn(
+              "p-1 rounded-xl transition-colors",
+              activeTab === 'recurring' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
+            )}>
+              <Repeat size={22} />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest">Fijos</span>
           </button>
           
           {/* Floating Action Button */}
@@ -1323,38 +2083,38 @@ function Dashboard() {
                 setIsRecurring(false);
                 setIsAdding(true);
               }}
-              className="w-16 h-16 bg-[#5A5A40] text-white rounded-[24px] flex items-center justify-center shadow-2xl shadow-[#5A5A40]/40 border-4 border-white hover:scale-110 active:scale-95 transition-all"
+              className="w-16 h-16 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white rounded-[24px] flex items-center justify-center shadow-2xl shadow-[#5A5A40]/40 dark:shadow-black/40 border-4 border-white dark:border-gray-900 hover:scale-110 active:scale-95 transition-all"
             >
               <Plus size={32} strokeWidth={3} />
             </button>
           </div>
 
           <button 
-            onClick={() => setActiveTab('recurring')}
+            onClick={() => setActiveTab('ai')}
             className={cn(
               "flex flex-col items-center gap-1.5 transition-all duration-300",
-              activeTab === 'recurring' ? "text-[#5A5A40] scale-110" : "text-gray-400"
+              activeTab === 'ai' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
             )}
           >
             <div className={cn(
               "p-1 rounded-xl transition-colors",
-              activeTab === 'recurring' ? "bg-[#5A5A40]/10" : ""
+              activeTab === 'ai' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
             )}>
-              <Repeat size={22} />
+              <Sparkles size={22} />
             </div>
-            <span className="text-[9px] font-black uppercase tracking-widest">Fijos</span>
+            <span className="text-[9px] font-black uppercase tracking-widest">IA</span>
           </button>
 
           <button 
             onClick={() => setActiveTab('group')}
             className={cn(
               "flex flex-col items-center gap-1.5 transition-all duration-300",
-              activeTab === 'group' ? "text-[#5A5A40] scale-110" : "text-gray-400"
+              activeTab === 'group' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
             )}
           >
             <div className={cn(
               "p-1 rounded-xl transition-colors",
-              activeTab === 'group' ? "bg-[#5A5A40]/10" : ""
+              activeTab === 'group' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
             )}>
               <Users size={22} />
             </div>
@@ -1362,27 +2122,149 @@ function Dashboard() {
           </button>
 
           <button 
-            onClick={() => {
-              // Quick access to budget
-              setBudgetInput(group?.budget?.toString() || '');
-              const initialCategoryBudgets: Record<string, string> = {};
-              const allCategories = [...CATEGORIES.expense, ...(group?.customCategories || [])];
-              allCategories.forEach(cat => {
-                initialCategoryBudgets[cat] = group?.categoryBudgets?.[cat]?.toString() || '';
-              });
-              setCategoryBudgetsInput(initialCategoryBudgets);
-              setCustomCategoriesInput(group?.customCategories || []);
-              setIsBudgetModalOpen(true);
-            }}
-            className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-[#5A5A40] transition-all"
+            onClick={() => setActiveTab('settings')}
+            className={cn(
+              "flex flex-col items-center gap-1.5 transition-all duration-300",
+              activeTab === 'settings' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
+            )}
           >
-            <div className="p-1 rounded-xl">
-              <Target size={22} />
+            <div className={cn(
+              "p-1 rounded-xl transition-colors",
+              activeTab === 'settings' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
+            )}>
+              <Settings size={22} />
             </div>
-            <span className="text-[9px] font-black uppercase tracking-widest">Metas</span>
+            <span className="text-[9px] font-black uppercase tracking-widest">Ajustes</span>
           </button>
         </div>
       </nav>
+
+      {/* Goal Modal */}
+      <AnimatePresence>
+        {isGoalModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-black tracking-tight dark:text-white">
+                    {editingGoalId ? 'Editar Meta' : 'Nueva Meta de Ahorro'}
+                  </h2>
+                  <button onClick={() => setIsGoalModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors dark:text-gray-400">
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveGoal} className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Nombre de la Meta</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={goalName}
+                      onChange={(e) => setGoalName(e.target.value)}
+                      placeholder="Ej: Viaje a la playa"
+                      className="w-full bg-[#F5F5F0] dark:bg-gray-800 border-none rounded-2xl py-4 px-6 font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-2 focus:ring-[#5A5A40] outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Monto Objetivo</label>
+                      <input 
+                        type="number" 
+                        required
+                        step="0.01"
+                        value={goalTarget}
+                        onChange={(e) => setGoalTarget(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-[#F5F5F0] dark:bg-gray-800 border-none rounded-2xl py-4 px-6 font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-2 focus:ring-[#5A5A40] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Monto Actual</label>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        value={goalCurrent}
+                        onChange={(e) => setGoalCurrent(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-[#F5F5F0] dark:bg-gray-800 border-none rounded-2xl py-4 px-6 font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-2 focus:ring-[#5A5A40] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Fecha Límite (Opcional)</label>
+                    <input 
+                      type="date" 
+                      value={goalDeadline}
+                      onChange={(e) => setGoalDeadline(e.target.value)}
+                      className="w-full bg-[#F5F5F0] dark:bg-gray-800 border-none rounded-2xl py-4 px-6 font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-2 focus:ring-[#5A5A40] outline-none"
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-5 rounded-2xl font-black text-lg shadow-xl shadow-[#5A5A40]/20 hover:bg-[#4A4A30] active:scale-[0.98] transition-all"
+                  >
+                    {editingGoalId ? 'Guardar Cambios' : 'Crear Meta'}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmModal.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className={cn(
+                  "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6",
+                  confirmModal.isDanger ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
+                )}>
+                  {confirmModal.isDanger ? <Trash2 size={32} /> : <X size={32} />}
+                </div>
+                <h3 className="text-xl font-bold mb-2 dark:text-white">{confirmModal.title}</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-8 leading-relaxed">{confirmModal.message}</p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => {
+                      confirmModal.onConfirm();
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    className={cn(
+                      "w-full py-4 rounded-2xl font-bold transition-all shadow-lg",
+                      confirmModal.isDanger ? "bg-red-600 text-white hover:bg-red-700" : "bg-[#5A5A40] dark:bg-[#8B8B6B] text-white hover:bg-[#4A4A30]"
+                    )}
+                  >
+                    {confirmModal.confirmText || 'Confirmar'}
+                  </button>
+                  <button 
+                    onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                    className="w-full py-4 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Group Action Modal */}
       <AnimatePresence>
@@ -1392,14 +2274,14 @@ function Dashboard() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
             >
               <div className="p-8">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold">
+                  <h2 className="text-2xl font-bold dark:text-white">
                     {groupAction === 'create' ? 'Crear Nuevo Grupo' : 'Unirse a un Grupo'}
                   </h2>
-                  <button onClick={() => setIsGroupModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <button onClick={() => setIsGroupModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors dark:text-gray-400">
                     <X size={24} />
                   </button>
                 </div>
@@ -1414,7 +2296,7 @@ function Dashboard() {
                         value={newGroupName}
                         onChange={(e) => setNewGroupName(e.target.value)}
                         placeholder="Ej. Familia Pérez"
-                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40]"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                       />
                     </div>
                   ) : (
@@ -1426,7 +2308,7 @@ function Dashboard() {
                         value={joinInviteCode}
                         onChange={(e) => setJoinInviteCode(e.target.value.toUpperCase())}
                         placeholder="ABC-123"
-                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40]"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                       />
                     </div>
                   )}
@@ -1462,16 +2344,16 @@ function Dashboard() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-lg bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl border border-[#E4E3E0] overflow-hidden"
+              className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-[40px] sm:rounded-[40px] shadow-2xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden"
             >
               <div className="p-8 max-h-[85vh] overflow-y-auto pb-12">
-                <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 sm:hidden" />
+                <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-6 sm:hidden" />
                 <div className="flex justify-between items-center mb-8">
                   <div>
-                    <h2 className="text-2xl font-black tracking-tight">Presupuesto</h2>
+                    <h2 className="text-2xl font-black tracking-tight dark:text-white">Presupuesto</h2>
                     <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Configuración mensual</p>
                   </div>
-                  <button onClick={() => setIsBudgetModalOpen(false)} className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setIsBudgetModalOpen(false)} className="w-10 h-10 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-full text-gray-400 hover:text-gray-600">
                     <X size={20} />
                   </button>
                 </div>
@@ -1487,7 +2369,7 @@ function Dashboard() {
                         value={budgetInput}
                         onChange={(e) => setBudgetInput(e.target.value)}
                         placeholder="0.00"
-                        className="w-full pl-8 pr-4 py-4 bg-[#F5F5F0] rounded-2xl border-none focus:ring-2 focus:ring-[#5A5A40] font-bold text-lg"
+                        className="w-full pl-8 pr-4 py-4 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl border-none focus:ring-2 focus:ring-[#5A5A40] font-bold text-lg dark:text-white"
                       />
                     </div>
                     {(() => {
@@ -1513,7 +2395,7 @@ function Dashboard() {
                         value={newCategoryInput}
                         onChange={(e) => setNewCategoryInput(e.target.value)}
                         placeholder="Nueva categoría..."
-                        className="flex-1 bg-[#F5F5F0] rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#5A5A40]"
+                        className="flex-1 bg-[#F5F5F0] dark:bg-gray-800 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                       />
                       <button 
                         type="button"
@@ -1530,8 +2412,8 @@ function Dashboard() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {customCategoriesInput.map(cat => (
-                        <div key={cat} className="bg-gray-100 px-3 py-1 rounded-full flex items-center gap-2">
-                          <span className="text-xs font-medium">{cat}</span>
+                        <div key={cat} className="bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full flex items-center gap-2">
+                          <span className="text-xs font-medium dark:text-gray-300">{cat}</span>
                           <button 
                             type="button"
                             onClick={() => {
@@ -1564,7 +2446,7 @@ function Dashboard() {
                               value={categoryBudgetsInput[cat] || ''}
                               onChange={(e) => setCategoryBudgetsInput(prev => ({ ...prev, [cat]: e.target.value }))}
                               placeholder="0.00"
-                              className="w-full pl-6 pr-3 py-2 bg-[#F5F5F0] rounded-xl border-none focus:ring-2 focus:ring-[#5A5A40] text-sm font-bold"
+                              className="w-full pl-6 pr-3 py-2 bg-[#F5F5F0] dark:bg-gray-800 rounded-xl border-none focus:ring-2 focus:ring-[#5A5A40] text-sm font-bold dark:text-white"
                             />
                           </div>
                         </div>
@@ -1578,11 +2460,11 @@ function Dashboard() {
                       <button
                         type="button"
                         onClick={downloadTemplate}
-                        className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors"
+                        className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       >
                         Descargar Plantilla
                       </button>
-                      <label className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors cursor-pointer">
+                      <label className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
                         Subir CSV
                         <input type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
                       </label>
@@ -1617,10 +2499,10 @@ function Dashboard() {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold">
+                <h2 className="text-xl sm:text-2xl font-bold dark:text-white">
                   {editingRecurringId ? 'Editar Fijo' : editingTransactionId ? 'Editar Transacción' : isRecurring ? 'Nuevo Fijo' : 'Nueva Transacción'}
                 </h2>
                 <button 
@@ -1629,7 +2511,7 @@ function Dashboard() {
                     setEditingRecurringId(null);
                     setEditingTransactionId(null);
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors dark:text-gray-400"
                 >
                   <X size={24} />
                 </button>
@@ -1646,13 +2528,13 @@ function Dashboard() {
                 className="space-y-5"
               >
                 {(true) && (
-                  <div className="flex p-1 bg-gray-100 rounded-2xl">
+                  <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl">
                     <button
                       type="button"
                       onClick={() => setType('expense')}
                       className={cn(
                         "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
-                        type === 'expense' ? "bg-white shadow-sm text-red-600" : "text-gray-500"
+                        type === 'expense' ? "bg-white dark:bg-gray-700 shadow-sm text-red-600 dark:text-red-400" : "text-gray-500"
                       )}
                     >
                       Gasto
@@ -1662,7 +2544,7 @@ function Dashboard() {
                       onClick={() => setType('income')}
                       className={cn(
                         "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
-                        type === 'income' ? "bg-white shadow-sm text-green-600" : "text-gray-500"
+                        type === 'income' ? "bg-white dark:bg-gray-700 shadow-sm text-green-600 dark:text-green-400" : "text-gray-500"
                       )}
                     >
                       Ingreso
@@ -1680,7 +2562,7 @@ function Dashboard() {
                       required
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold focus:ring-2 focus:ring-[#5A5A40]"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold focus:ring-2 focus:ring-[#5A5A40] placeholder:text-gray-400 dark:text-white"
                       placeholder="0.00"
                     />
                   </div>
@@ -1693,11 +2575,11 @@ function Dashboard() {
                       required
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                     >
-                      <option value="">Seleccionar</option>
+                      <option value="" className="dark:bg-gray-900">Seleccionar</option>
                       {(type === 'expense' ? [...CATEGORIES.expense, ...(group?.customCategories || [])] : CATEGORIES.income).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat} value={cat} className="dark:bg-gray-900">{cat}</option>
                       ))}
                     </select>
                   </div>
@@ -1709,7 +2591,7 @@ function Dashboard() {
                         required
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                       />
                     </div>
                   ) : (isRecurring || editingRecurringId) ? (
@@ -1719,10 +2601,10 @@ function Dashboard() {
                         required
                         value={dayOfMonth}
                         onChange={(e) => setDayOfMonth(e.target.value)}
-                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                       >
                         {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                          <option key={day} value={day}>{day}</option>
+                          <option key={day} value={day} className="dark:bg-gray-900">{day}</option>
                         ))}
                       </select>
                     </div>
@@ -1734,7 +2616,7 @@ function Dashboard() {
                         required
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                       />
                     </div>
                   )}
@@ -1747,7 +2629,7 @@ function Dashboard() {
                       type="date" 
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                     />
                     <p className="text-[10px] text-gray-400 px-2">El fijo se marcará como FINALIZADO después de esta fecha.</p>
                   </div>
@@ -1765,8 +2647,8 @@ function Dashboard() {
                           className={cn(
                             "flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border transition-all",
                             paymentMethod === method 
-                              ? "bg-[#5A5A40] text-white border-[#5A5A40] shadow-md" 
-                              : "bg-white text-gray-600 border-gray-200 hover:border-[#5A5A40]"
+                              ? "bg-[#5A5A40] dark:bg-[#8B8B6B] text-white border-[#5A5A40] dark:border-[#8B8B6B] shadow-md" 
+                              : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:border-[#5A5A40] dark:hover:border-[#8B8B6B]"
                           )}
                         >
                           {method === 'Efectivo' && <Banknote size={16} />}
@@ -1786,7 +2668,7 @@ function Dashboard() {
                     type="text" 
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40]"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                     placeholder={isRecurring ? "Ej. Pago de Hipoteca" : "Ej. Almuerzo en el trabajo"}
                   />
                 </div>
@@ -1807,11 +2689,17 @@ function Dashboard() {
 }
 
 function Landing() {
-  const { signIn, createGroup, joinGroup, profile, loading, user } = useAuth();
+  const { signIn, createGroup, joinGroup, profile, loading, user, isDarkMode, setIsDarkMode } = useAuth();
   const [step, setStep] = useState<'login' | 'choice' | 'create' | 'join'>('login');
   const [groupName, setGroupName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (user && !profile && !loading && step === 'login') {
+      setStep('choice');
+    }
+  }, [user, profile, loading, step]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1862,38 +2750,49 @@ function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-black flex flex-col items-center justify-center p-4 relative">
+      <div className="absolute top-6 right-6">
+        <button 
+          onClick={() => setIsDarkMode(prev => !prev)}
+          className="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 transition-all"
+          title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+      </div>
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white p-8 rounded-[40px] shadow-xl border border-[#E4E3E0] text-center"
+        className="w-full max-w-md bg-white dark:bg-gray-900 p-8 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800 text-center"
       >
-        <div className="w-16 h-16 bg-[#5A5A40] rounded-2xl flex items-center justify-center text-white mx-auto mb-6">
+        <div className="w-16 h-16 bg-[#5A5A40] dark:bg-[#8B8B6B] rounded-2xl flex items-center justify-center text-white mx-auto mb-6">
           <Wallet size={32} />
         </div>
         
         <AnimatePresence mode="wait">
           {step === 'login' && (
             <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h1 className="text-3xl font-bold mb-2">Bienvenido a Finanza</h1>
-              <p className="text-gray-500 mb-8">Toma el control de tu presupuesto personal y familiar de forma sencilla.</p>
+              <h1 className="text-3xl font-bold mb-2 dark:text-white">Bienvenido a Finanza</h1>
+              <p className="text-gray-500 dark:text-gray-400 mb-8">Toma el control de tu presupuesto personal y familiar de forma sencilla.</p>
               <button 
                 disabled={isActionLoading}
                 onClick={async () => {
                   setIsActionLoading(true);
                   try {
                     await signIn();
-                    setStep('choice');
+                    // The signIn function in AuthContext updates the user state.
+                    // If the user already has a profile, the AppContent will handle the redirect.
+                    // We only set step to 'choice' if we are sure they need to create/join.
                   } catch (error) {
                     toast.error('Error al iniciar sesión');
                   } finally {
                     setIsActionLoading(false);
                   }
                 }}
-                className="w-full flex items-center justify-center gap-3 bg-white border border-[#E4E3E0] py-4 rounded-2xl font-bold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border border-[#E4E3E0] dark:border-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-white"
               >
                 {isActionLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-[#5A5A40]" />
+                  <Loader2 className="w-5 h-5 animate-spin text-[#5A5A40] dark:text-[#8B8B6B]" />
                 ) : (
                   <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
                 )}
@@ -1904,18 +2803,18 @@ function Landing() {
 
           {step === 'choice' && (
             <motion.div key="choice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-2xl font-bold mb-2">Casi listo</h2>
-              <p className="text-gray-500 mb-8">¿Cómo quieres empezar a gestionar tu presupuesto?</p>
+              <h2 className="text-2xl font-bold mb-2 dark:text-white">Casi listo</h2>
+              <p className="text-gray-500 dark:text-gray-400 mb-8">¿Cómo quieres empezar a gestionar tu presupuesto?</p>
               <div className="space-y-4">
                 <button 
                   onClick={() => setStep('create')}
-                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors"
+                  className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors"
                 >
                   Crear nuevo grupo
                 </button>
                 <button 
                   onClick={() => setStep('join')}
-                  className="w-full bg-white border border-[#E4E3E0] py-4 rounded-2xl font-bold hover:bg-gray-50 transition-colors"
+                  className="w-full bg-white dark:bg-gray-800 border border-[#E4E3E0] dark:border-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors dark:text-white"
                 >
                   Unirse a un grupo existente
                 </button>
@@ -1925,8 +2824,8 @@ function Landing() {
 
           {step === 'create' && (
             <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-2xl font-bold mb-2">Crear Grupo</h2>
-              <p className="text-gray-500 mb-8">Dale un nombre a tu presupuesto familiar o personal.</p>
+              <h2 className="text-2xl font-bold mb-2 dark:text-white">Crear Grupo</h2>
+              <p className="text-gray-500 dark:text-gray-400 mb-8">Dale un nombre a tu presupuesto familiar o personal.</p>
               <form onSubmit={handleCreate} className="space-y-4">
                 <input 
                   type="text" 
@@ -1935,12 +2834,12 @@ function Landing() {
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                   placeholder="Ej. Familia Pérez o Mi Presupuesto"
-                  className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] disabled:opacity-50"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] disabled:opacity-50 dark:text-white"
                 />
                 <button 
                   type="submit"
                   disabled={isActionLoading}
-                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isActionLoading && <Loader2 className="w-5 h-5 animate-spin" />}
                   {isActionLoading ? 'Creando...' : 'Comenzar'}
@@ -1952,8 +2851,8 @@ function Landing() {
 
           {step === 'join' && (
             <motion.div key="join" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-2xl font-bold mb-2">Unirse a Grupo</h2>
-              <p className="text-gray-500 mb-8">Ingresa el código que te compartieron.</p>
+              <h2 className="text-2xl font-bold mb-2 dark:text-white">Unirse a Grupo</h2>
+              <p className="text-gray-500 dark:text-gray-400 mb-8">Ingresa el código que te compartieron.</p>
               <form onSubmit={handleJoin} className="space-y-4">
                 <input 
                   type="text" 
@@ -1962,12 +2861,12 @@ function Landing() {
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                   placeholder="CÓDIGO"
-                  className="w-full bg-gray-50 border-none rounded-2xl py-4 px-6 text-center text-2xl font-mono font-bold focus:ring-2 focus:ring-[#5A5A40] disabled:opacity-50"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 text-center text-2xl font-mono font-bold focus:ring-2 focus:ring-[#5A5A40] disabled:opacity-50 dark:text-white"
                 />
                 <button 
                   type="submit"
                   disabled={isActionLoading}
-                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isActionLoading && <Loader2 className="w-5 h-5 animate-spin" />}
                   {isActionLoading ? 'Uniéndose...' : 'Unirse ahora'}
@@ -1983,22 +2882,31 @@ function Landing() {
 }
 
 function BlockedScreen() {
-  const { logout } = useAuth();
+  const { logout, isDarkMode, setIsDarkMode } = useAuth();
   return (
-    <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4 text-center">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-black flex flex-col items-center justify-center p-4 text-center relative transition-colors duration-300">
+      <div className="absolute top-6 right-6">
+        <button 
+          onClick={() => setIsDarkMode(prev => !prev)}
+          className="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 transition-all"
+          title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+      </div>
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-xl border border-[#E4E3E0]"
+        className="w-full max-w-md bg-white dark:bg-gray-900 p-10 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800"
       >
-        <div className="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center text-red-600 mx-auto mb-8">
+        <div className="w-20 h-20 bg-red-100 dark:bg-red-900/20 rounded-3xl flex items-center justify-center text-red-600 dark:text-red-400 mx-auto mb-8">
           <X size={40} />
         </div>
-        <h1 className="text-3xl font-bold mb-4">Cuenta Bloqueada</h1>
-        <p className="text-gray-500 mb-8">Lo sentimos, tu acceso a Finanza ha sido restringido por incumplimiento de nuestras normas de uso.</p>
+        <h1 className="text-3xl font-bold mb-4 dark:text-white">Cuenta Bloqueada</h1>
+        <p className="text-gray-500 dark:text-gray-400 mb-8">Lo sentimos, tu acceso a Finanza ha sido restringido por incumplimiento de nuestras normas de uso.</p>
         
         <div className="space-y-4">
-          <div className="p-4 bg-red-50 rounded-2xl text-red-800 text-sm font-medium">
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl text-red-800 dark:text-red-400 text-sm font-medium">
             Estado: Acceso denegado
           </div>
           <button 
@@ -2015,11 +2923,26 @@ function BlockedScreen() {
 }
 
 function AdminPanel() {
-  const { logout, setViewMode } = useAuth();
+  const { logout, setViewMode, isDarkMode, setIsDarkMode } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     const unsubGroups = onSnapshot(collection(db, 'groups'), (snapshot) => {
@@ -2059,12 +2982,22 @@ function AdminPanel() {
 
   const toggleUserStatus = async (userId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
-    try {
-      await setDoc(doc(db, 'users', userId), { status: newStatus }, { merge: true });
-      toast.success(`Usuario ${newStatus === 'blocked' ? 'bloqueado' : 'desbloqueado'} correctamente`);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
-    }
+    
+    setConfirmModal({
+      isOpen: true,
+      title: newStatus === 'blocked' ? 'Bloquear Usuario' : 'Desbloquear Usuario',
+      message: `¿Estás seguro de que deseas ${newStatus === 'blocked' ? 'bloquear' : 'desbloquear'} a este usuario?`,
+      isDanger: newStatus === 'blocked',
+      confirmText: newStatus === 'blocked' ? 'Bloquear' : 'Desbloquear',
+      onConfirm: async () => {
+        try {
+          await setDoc(doc(db, 'users', userId), { status: newStatus }, { merge: true });
+          toast.success(`Usuario ${newStatus === 'blocked' ? 'bloqueado' : 'desbloqueado'} correctamente`);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+        }
+      }
+    });
   };
 
   if (loading) return null;
@@ -2073,22 +3006,29 @@ function AdminPanel() {
   const activeGroups = groups.filter(g => g.status === 'active');
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] p-6">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-gray-950 p-6 transition-colors duration-300">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-[#5A5A40]">Panel de Administración</h1>
-            <p className="text-gray-500">Gestión global de Finanza</p>
+            <h1 className="text-3xl font-bold text-[#5A5A40] dark:text-[#8B8B6B]">Panel de Administración</h1>
+            <p className="text-gray-500 dark:text-gray-400">Gestión global de Finanza</p>
           </div>
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setViewMode('personal')}
-              className="flex items-center gap-2 bg-white border border-[#E4E3E0] px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
             >
               <LayoutDashboard size={18} />
               <span>Vista Personal</span>
             </button>
-            <button onClick={logout} className="flex items-center gap-2 text-gray-500 hover:text-red-500 transition-colors">
+            <button 
+              onClick={() => setIsDarkMode(prev => !prev)}
+              className="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 transition-all"
+              title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <button onClick={logout} className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">
               <LogOut size={20} />
               <span>Cerrar Sesión</span>
             </button>
@@ -2096,25 +3036,25 @@ function AdminPanel() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
-            <p className="text-gray-500 text-sm mb-1">Total Usuarios</p>
-            <p className="text-3xl font-bold">{users.length}</p>
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Total Usuarios</p>
+            <p className="text-3xl font-bold dark:text-white">{users.length}</p>
           </div>
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
-            <p className="text-gray-500 text-sm mb-1">Grupos Activos</p>
-            <p className="text-3xl font-bold text-green-600">{activeGroups.length}</p>
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Grupos Activos</p>
+            <p className="text-3xl font-bold text-green-600 dark:text-green-400">{activeGroups.length}</p>
           </div>
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E4E3E0]">
-            <p className="text-gray-500 text-sm mb-1">Pendientes</p>
-            <p className="text-3xl font-bold text-amber-600">{pendingGroups.length}</p>
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Pendientes</p>
+            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{pendingGroups.length}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-[40px] shadow-xl border border-[#E4E3E0] overflow-hidden">
-          <div className="p-8 border-b border-[#F0EFEA]">
-            <h2 className="text-xl font-bold">Solicitudes de Autorización</h2>
+        <div className="bg-white dark:bg-gray-900 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+          <div className="p-8 border-b border-[#F0EFEA] dark:border-gray-800">
+            <h2 className="text-xl font-bold dark:text-white">Solicitudes de Autorización</h2>
           </div>
-          <div className="divide-y divide-[#F0EFEA]">
+          <div className="divide-y divide-[#F0EFEA] dark:divide-gray-800">
             {pendingGroups.length === 0 ? (
               <div className="p-12 text-center text-gray-400">
                 No hay solicitudes pendientes
@@ -2123,15 +3063,15 @@ function AdminPanel() {
               pendingGroups.map(g => {
                 const owner = users.find(u => u.uid === g.ownerId);
                 return (
-                  <div key={g.id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 transition-colors gap-4">
+                  <div key={g.id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors gap-4">
                     <div className="min-w-0">
-                      <h3 className="font-bold text-lg truncate">{g.name}</h3>
-                      <p className="text-sm text-gray-500 truncate">Solicitado por: {owner?.displayName || owner?.email || 'Desconocido'}</p>
-                      <p className="text-xs text-gray-400">ID: {g.id}</p>
+                      <h3 className="font-bold text-lg truncate dark:text-white">{g.name}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">Solicitado por: {owner?.displayName || owner?.email || 'Desconocido'}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">ID: {g.id}</p>
                     </div>
                     <button 
                       onClick={() => authorizeGroup(g.id)}
-                      className="bg-[#5A5A40] text-white px-4 sm:px-6 py-2 rounded-xl font-bold hover:bg-[#4A4A30] transition-colors flex-shrink-0 text-sm"
+                      className="bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-4 sm:px-6 py-2 rounded-xl font-bold hover:bg-[#4A4A30] transition-colors flex-shrink-0 text-sm"
                     >
                       Autorizar
                     </button>
@@ -2143,34 +3083,34 @@ function AdminPanel() {
         </div>
 
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded-[40px] shadow-xl border border-[#E4E3E0] overflow-hidden">
-            <div className="p-8 border-b border-[#F0EFEA]">
-              <h2 className="text-xl font-bold">Gestión de Usuarios</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+            <div className="p-8 border-b border-[#F0EFEA] dark:border-gray-800">
+              <h2 className="text-xl font-bold dark:text-white">Gestión de Usuarios</h2>
             </div>
-            <div className="divide-y divide-[#F0EFEA]">
+            <div className="divide-y divide-[#F0EFEA] dark:divide-gray-800">
               {users.map(u => (
-                <div key={u.uid} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 transition-colors gap-3">
+                <div key={u.uid} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors gap-3">
                   <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                     {u.photoURL ? (
                       <img src={u.photoURL} alt={u.displayName || ''} className="w-10 h-10 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
                     ) : (
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex-shrink-0 flex items-center justify-center text-gray-400">
+                      <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex-shrink-0 flex items-center justify-center text-gray-400 dark:text-gray-500">
                         <User size={20} />
                       </div>
                     )}
                     <div className="min-w-0">
-                      <h3 className="font-bold truncate">{u.displayName || 'Usuario'}</h3>
-                      <p className="text-sm text-gray-500 truncate">{u.email}</p>
+                      <h3 className="font-bold truncate dark:text-white">{u.displayName || 'Usuario'}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{u.email}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                    <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase whitespace-nowrap ${u.status === 'blocked' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                    <span className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase whitespace-nowrap ${u.status === 'blocked' ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400' : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400'}`}>
                       {u.status === 'blocked' ? 'Bloqueado' : 'Activo'}
                     </span>
                     {u.email !== 'kevinboteo@gmail.com' && (
                       <button 
                         onClick={() => toggleUserStatus(u.uid, u.status || 'active')}
-                        className={`p-2 rounded-xl transition-colors flex-shrink-0 ${u.status === 'blocked' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                        className={`p-2 rounded-xl transition-colors flex-shrink-0 ${u.status === 'blocked' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'}`}
                         title={u.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
                       >
                         {u.status === 'blocked' ? <Check size={18} /> : <X size={18} />}
@@ -2182,28 +3122,28 @@ function AdminPanel() {
             </div>
           </div>
 
-          <div className="bg-white rounded-[40px] shadow-xl border border-[#E4E3E0] overflow-hidden">
-            <div className="p-8 border-b border-[#F0EFEA]">
-              <h2 className="text-xl font-bold">Registro de Notificaciones</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+            <div className="p-8 border-b border-[#F0EFEA] dark:border-gray-800">
+              <h2 className="text-xl font-bold dark:text-white">Registro de Notificaciones</h2>
             </div>
-            <div className="divide-y divide-[#F0EFEA]">
+            <div className="divide-y divide-[#F0EFEA] dark:divide-gray-800">
               {notifications.length === 0 ? (
                 <div className="p-12 text-center text-gray-400">
                   Sin notificaciones recientes
                 </div>
               ) : (
                 notifications.map(n => (
-                  <div key={n.id} className="p-4 sm:p-6 hover:bg-gray-50 transition-colors">
+                  <div key={n.id} className="p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-[10px] sm:text-xs font-bold uppercase text-[#5A5A40] bg-[#F0EFEA] px-2 py-0.5 rounded whitespace-nowrap">
+                      <span className="text-[10px] sm:text-xs font-bold uppercase text-[#5A5A40] dark:text-[#8B8B6B] bg-[#F0EFEA] dark:bg-gray-800 px-2 py-0.5 rounded whitespace-nowrap">
                         {n.type === 'group_join' ? 'Unión a Grupo' : 'Notificación'}
                       </span>
-                      <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">
                         {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'HH:mm') : ''}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-800 break-words">{n.message}</p>
-                    <p className="text-[10px] text-gray-400 mt-1 truncate">Enviado a: {n.to}</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 break-words">{n.message}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 truncate">Enviado a: {n.to}</p>
                   </div>
                 ))
               )}
@@ -2211,33 +3151,87 @@ function AdminPanel() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmModal.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className={cn(
+                  "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6",
+                  confirmModal.isDanger ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
+                )}>
+                  {confirmModal.isDanger ? <Trash2 size={32} /> : <X size={32} />}
+                </div>
+                <h3 className="text-xl font-bold mb-2 dark:text-white">{confirmModal.title}</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-8 leading-relaxed">{confirmModal.message}</p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => {
+                      confirmModal.onConfirm();
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    className={cn(
+                      "w-full py-4 rounded-2xl font-bold transition-all shadow-lg",
+                      confirmModal.isDanger ? "bg-red-600 text-white hover:bg-red-700" : "bg-[#5A5A40] dark:bg-[#8B8B6B] text-white hover:bg-[#4A4A30]"
+                    )}
+                  >
+                    {confirmModal.confirmText || 'Confirmar'}
+                  </button>
+                  <button 
+                    onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                    className="w-full py-4 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function PendingAuthorization() {
-  const { logout, group } = useAuth();
+  const { logout, group, isDarkMode, setIsDarkMode } = useAuth();
   return (
-    <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4 text-center">
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-black flex flex-col items-center justify-center p-4 text-center transition-colors duration-300 relative">
+      <div className="absolute top-6 right-6">
+        <button 
+          onClick={() => setIsDarkMode(prev => !prev)}
+          className="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 transition-all"
+          title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+      </div>
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-xl border border-[#E4E3E0]"
+        className="w-full max-w-md bg-white dark:bg-gray-900 p-10 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800"
       >
-        <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center text-amber-600 mx-auto mb-8">
+        <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/20 rounded-3xl flex items-center justify-center text-amber-600 dark:text-amber-400 mx-auto mb-8">
           <Loader2 size={40} className="animate-spin" />
         </div>
-        <h1 className="text-3xl font-bold mb-4">Esperando Autorización</h1>
-        <p className="text-gray-500 mb-2">Tu grupo <span className="font-bold text-[#5A5A40]">"{group?.name}"</span> ha sido creado con éxito.</p>
-        <p className="text-gray-500 mb-8">El administrador debe autorizar tu solicitud antes de que puedas comenzar a registrar transacciones. Se te notificará automáticamente.</p>
+        <h1 className="text-3xl font-bold mb-4 dark:text-white">Esperando Autorización</h1>
+        <p className="text-gray-500 dark:text-gray-400 mb-2">Tu grupo <span className="font-bold text-[#5A5A40] dark:text-[#8B8B6B]">"{group?.name}"</span> ha sido creado con éxito.</p>
+        <p className="text-gray-500 dark:text-gray-400 mb-8">El administrador debe autorizar tu solicitud antes de que puedas comenzar a registrar transacciones. Se te notificará automáticamente.</p>
         
         <div className="space-y-4">
-          <div className="p-4 bg-amber-50 rounded-2xl text-amber-800 text-sm font-medium">
+          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl text-amber-800 dark:text-amber-400 text-sm font-medium">
             Estado: Pendiente de revisión
           </div>
           <button 
             onClick={logout}
-            className="w-full flex items-center justify-center gap-2 text-gray-400 hover:text-red-500 font-medium transition-colors"
+            className="w-full flex items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 font-medium transition-colors"
           >
             <LogOut size={18} />
             Cerrar Sesión
@@ -2249,16 +3243,25 @@ function PendingAuthorization() {
 }
 
 function AppContent() {
-  const { user, profile, group, isAdmin, viewMode, loading } = useAuth();
+  const { user, profile, group, isAdmin, viewMode, loading, isDarkMode, setIsDarkMode } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F5F5F0] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F5F5F0] dark:bg-gray-950 flex flex-col items-center justify-center p-4 transition-colors duration-300">
         <motion.div 
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-          className="w-12 h-12 bg-[#5A5A40] rounded-2xl"
-        />
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center"
+        >
+          <div className="w-20 h-20 bg-[#5A5A40] dark:bg-[#8B8B6B] rounded-[24px] flex items-center justify-center text-white shadow-2xl shadow-[#5A5A40]/30 dark:shadow-black/30 mb-6">
+            <Wallet size={40} />
+          </div>
+          <h1 className="text-3xl font-black tracking-tighter text-[#1A1A1A] dark:text-white mb-1">BudgetBuddy</h1>
+          <div className="flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin text-[#5A5A40] dark:text-[#8B8B6B]" />
+            <p className="text-[10px] font-bold text-[#5A5A40] dark:text-[#8B8B6B] uppercase tracking-[0.2em]">Cargando...</p>
+          </div>
+        </motion.div>
       </div>
     );
   }

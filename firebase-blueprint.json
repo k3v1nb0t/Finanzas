@@ -59,6 +59,43 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["groupId", "userId", "amount", "type", "category", "date"]
+    },
+    "RecurringExpense": {
+      "title": "Recurring Expense",
+      "description": "Template for monthly recurring expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "groupId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "dayOfMonth": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["Efectivo", "Tarjeta", "Transferencia", "Otros"] },
+        "active": { "type": "boolean" },
+        "endDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["active", "finished"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "groupId", "amount", "category", "dayOfMonth", "paymentMethod"]
+    },
+    "SavingsGoal": {
+      "title": "Savings Goal",
+      "description": "A financial goal to save money",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "groupId": { "type": "string" },
+        "name": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "deadline": { "type": "string", "format": "date" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "groupId", "name", "targetAmount", "currentAmount"]
     }
   },
   "firestore": {
@@ -74,32 +111,17 @@
       "schema": "Transaction",
       "description": "Transactions within a group"
     },
+    "/groups/{groupId}/recurringExpenses/{expenseId}": {
+      "schema": "RecurringExpense",
+      "description": "Monthly recurring expenses templates"
+    },
+    "/groups/{groupId}/savingsGoals/{goalId}": {
+      "schema": "SavingsGoal",
+      "description": "Savings goals within a group"
+    },
     "/notifications/{notificationId}": {
       "schema": "object",
-      "description": "System notifications (e.g., email triggers)"
-    }
-    "recurringExpenses": {
-      "schema": {
-        "title": "Recurring Expense",
-        "description": "Template for monthly recurring expenses",
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "groupId": { "type": "string" },
-          "amount": { "type": "number" },
-          "type": { "type": "string", "enum": ["income", "expense"] },
-          "category": { "type": "string" },
-          "description": { "type": "string" },
-          "dayOfMonth": { "type": "number" },
-          "paymentMethod": { "type": "string", "enum": ["Efectivo", "Tarjeta", "Transferencia", "Otros"] },
-          "active": { "type": "boolean" },
-          "endDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
-          "status": { "type": "string", "enum": ["active", "finished"] },
-          "createdAt": { "type": "string", "format": "date-time" }
-        },
-        "required": ["id", "groupId", "amount", "category", "dayOfMonth", "paymentMethod"]
-      },
-      "description": "Monthly recurring expenses templates"
+      "description": "System notifications"
     }
   }
 }

@@ -7,6 +7,8 @@ export interface UserProfile {
   groupIds: string[];
   role: 'admin' | 'user';
   status?: 'active' | 'blocked';
+  aiSharingEnabled?: boolean;
+  aiMonthsLookback?: number;
   createdAt: any;
   updatedAt?: any;
 }
@@ -55,6 +57,18 @@ export interface Transaction {
   isRecurring?: boolean;
   recurringId?: string;
   date: any;
+  createdAt: any;
+}
+
+export interface SavingsGoal {
+  id: string;
+  groupId: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline?: string; // Format: YYYY-MM-DD
+  icon?: string;
+  color?: string;
   createdAt: any;
 }
 

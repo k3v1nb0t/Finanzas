@@ -41,6 +41,11 @@ interface AuthContextType {
   createGroup: (name: string) => Promise<void>;
   joinGroup: (inviteCode: string) => Promise<void>;
   switchGroup: (groupId: string) => Promise<void>;
+  isSwitching: boolean;
+  isDarkMode: boolean;
+  setIsDarkMode: (val: boolean | ((prev: boolean) => boolean)) => void;
+  toggleAISharing: () => Promise<void>;
+  updateAISettings: (months: number) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,9 +56,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [group, setGroup] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [viewMode, setViewMode] = useState<'admin' | 'personal'>('admin');
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
 
   const isAdmin = user?.email === ADMIN_EMAIL && user?.emailVerified;
+
+  // Dark Mode effect
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     let profileUnsubscribe: (() => void) | undefined;
@@ -77,30 +102,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Real-time groups listener
   useEffect(() => {
-    if (!profile?.groupIds || profile.groupIds.length === 0) {
+    if (!user) {
       setGroups([]);
+      setGroup(null);
       return;
     }
 
-    const q = query(collection(db, 'groups'), where('id', 'in', profile.groupIds));
+    const q = query(collection(db, 'groups'), where('members', 'array-contains', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const groupsList = snapshot.docs.map(doc => doc.data() as Group);
       setGroups(groupsList);
       
       // Update current group if it's in the list
-      const currentGroup = groupsList.find(g => g.id === profile.groupId);
+      const currentGroup = groupsList.find(g => g.id === profile?.groupId);
       if (currentGroup) {
         setGroup(currentGroup);
-      } else if (groupsList.length > 0 && !profile.groupId) {
+      } else if (groupsList.length > 0 && !profile?.groupId) {
         // If no current group but we have groups, pick the first one
         switchGroup(groupsList[0].id);
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'groups');
+      console.error("Error fetching groups:", error);
+      // Don't throw here to avoid blocking the whole app
     });
 
     return unsubscribe;
-  }, [profile?.groupIds, profile?.groupId]);
+  }, [user?.uid, profile?.groupId]);
 
   const fetchProfile = async (firebaseUser: FirebaseUser) => {
     try {
@@ -115,8 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setLoading(false);
       }, (error) => {
-        handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
         setLoading(false);
+        handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
       });
 
       return unsubscribe;
@@ -160,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await setDoc(doc(db, 'groups', groupId), newGroup);
       
-      const currentGroupIds = profile?.groupIds || [];
+      const currentGroupIds = profile?.groupIds || (profile?.groupId ? [profile.groupId] : []);
       const newGroupIds = [...new Set([...currentGroupIds, groupId])];
 
       const updatedProfile: Partial<UserProfile> = {
@@ -222,7 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const currentGroupIds = profile?.groupIds || [];
+      const currentGroupIds = profile?.groupIds || (profile?.groupId ? [profile.groupId] : []);
       const newGroupIds = [...new Set([...currentGroupIds, groupData.id])];
 
       const updatedProfile: Partial<UserProfile> = {
@@ -254,10 +281,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchGroup = async (groupId: string) => {
     if (!user || !profile) return;
+    setIsSwitching(true);
     try {
       await setDoc(doc(db, 'users', user.uid), { groupId }, { merge: true });
+      // The real-time listener will update the group state, 
+      // but we add a small delay to ensure the UI transition feels intentional
+      setTimeout(() => setIsSwitching(false), 800);
     } catch (error) {
+      setIsSwitching(false);
       handleFirestoreError(error, OperationType.WRITE, 'users/switch-group');
+    }
+  };
+
+  const toggleAISharing = async () => {
+    if (!user || !profile) return;
+    try {
+      const newValue = !profile.aiSharingEnabled;
+      await setDoc(doc(db, 'users', user.uid), { aiSharingEnabled: newValue }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users/toggle-ai');
+    }
+  };
+
+  const updateAISettings = async (months: number) => {
+    if (!user || !profile) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), { aiMonthsLookback: months }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users/update-ai-settings');
     }
   };
 
@@ -275,7 +326,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout, 
       createGroup, 
       joinGroup,
-      switchGroup
+      switchGroup,
+      isSwitching,
+      isDarkMode,
+      setIsDarkMode,
+      toggleAISharing,
+      updateAISettings
     }}>
       {children}
     </AuthContext.Provider>
