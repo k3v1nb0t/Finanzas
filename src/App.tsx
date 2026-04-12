@@ -2414,12 +2414,14 @@ function Dashboard() {
                     <div className="relative">
                       <div className="flex flex-wrap gap-2 mb-2">
                         {reportUnitFilter.map(unit => (
-                          <span key={unit} className="bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                          <button 
+                            key={unit} 
+                            onClick={() => setReportUnitFilter(prev => prev.filter(u => u !== unit))}
+                            className="bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors group"
+                          >
                             {reportType === 'tag' ? `#${unit}` : unit}
-                            <button onClick={() => setReportUnitFilter(prev => prev.filter(u => u !== unit))}>
-                              <X size={10} />
-                            </button>
-                          </span>
+                            <X size={10} className="group-hover:scale-110 transition-transform" />
+                          </button>
                         ))}
                         {reportUnitFilter.length === 0 && (
                           <span className="text-[10px] text-gray-400 font-medium italic">Todos seleccionados</span>
@@ -3437,16 +3439,15 @@ function Dashboard() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {tags.map(tag => (
-                      <span key={tag} className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1">
+                      <button 
+                        key={tag} 
+                        type="button"
+                        onClick={() => setTags(tags.filter(t => t !== tag))}
+                        className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors group"
+                      >
                         #{tag}
-                        <button 
-                          type="button"
-                          onClick={() => setTags(tags.filter(t => t !== tag))}
-                          className="hover:text-red-500"
-                        >
-                          <X size={10} />
-                        </button>
-                      </span>
+                        <X size={10} className="group-hover:scale-110 transition-transform" />
+                      </button>
                     ))}
                   </div>
                 </div>
