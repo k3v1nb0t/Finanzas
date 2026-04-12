@@ -22,6 +22,7 @@ import {
   Loader2,
   Target,
   X,
+  ChevronDown,
   CreditCard,
   Banknote,
   Repeat,
@@ -308,15 +309,7 @@ function Dashboard() {
   const [reportTransactionType, setReportTransactionType] = useState<'expense' | 'income'>('expense');
   const [reportUnitFilter, setReportUnitFilter] = useState<string[]>([]);
   const [unitSearchInput, setUnitSearchInput] = useState('');
-  const [reportConfig, setReportConfig] = useState({
-    type: 'category' as 'category' | 'tag' | 'paymentMethod',
-    period: 'month' as 'month' | 'year',
-    month: format(new Date(), 'yyyy-MM'),
-    year: new Date().getFullYear().toString(),
-    transactionType: 'expense' as 'expense' | 'income',
-    unitFilter: [] as string[]
-  });
-  const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
+  const [isUnitDropdownOpen, setIsUnitDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -699,26 +692,24 @@ function Dashboard() {
   }, [tagInput, allGroupTags, tags]);
 
   const reportTransactions = useMemo(() => {
-    if (!hasGeneratedReport) return [];
-    
     return transactions.filter(t => {
       const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
       const tYear = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy');
       const tMonth = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM');
       
-      const periodMatch = reportConfig.period === 'month' 
-        ? tMonth === reportConfig.month 
-        : tYear === reportConfig.year;
+      const periodMatch = reportPeriod === 'month' 
+        ? tMonth === selectedMonth 
+        : tYear === reportYear;
         
-      if (!periodMatch || t.type !== reportConfig.transactionType) return false;
+      if (!periodMatch || t.type !== reportTransactionType) return false;
 
-      if (reportConfig.unitFilter.length > 0) {
-        if (reportConfig.type === 'category') {
-          return reportConfig.unitFilter.includes(t.category);
-        } else if (reportConfig.type === 'tag') {
-          return (t.tags || []).some(tag => reportConfig.unitFilter.includes(tag));
-        } else if (reportConfig.type === 'paymentMethod') {
-          return reportConfig.unitFilter.includes(t.paymentMethod || 'Otros');
+      if (reportUnitFilter.length > 0) {
+        if (reportType === 'category') {
+          return reportUnitFilter.includes(t.category);
+        } else if (reportType === 'tag') {
+          return (t.tags || []).some(tag => reportUnitFilter.includes(tag));
+        } else if (reportType === 'paymentMethod') {
+          return reportUnitFilter.includes(t.paymentMethod || 'Otros');
         }
       }
 
@@ -728,12 +719,10 @@ function Dashboard() {
       const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
       return dateB.getTime() - dateA.getTime();
     });
-  }, [transactions, reportConfig, hasGeneratedReport]);
+  }, [transactions, reportPeriod, selectedMonth, reportYear, reportTransactionType, reportUnitFilter, reportType]);
 
   const reportData = useMemo(() => {
-    if (!hasGeneratedReport) return [];
-
-    if (reportConfig.type === 'category') {
+    if (reportType === 'category') {
       const categories: Record<string, number> = {};
       reportTransactions.forEach(t => {
         categories[t.category] = (categories[t.category] || 0) + t.amount;
@@ -742,7 +731,7 @@ function Dashboard() {
         name: `${getCategoryEmoji(name)} ${name}`, 
         value 
       })).sort((a, b) => b.value - a.value);
-    } else if (reportConfig.type === 'tag') {
+    } else if (reportType === 'tag') {
       const tags: Record<string, number> = {};
       reportTransactions.forEach(t => {
         const tTags = t.tags || [];
@@ -769,7 +758,7 @@ function Dashboard() {
         value 
       })).sort((a, b) => b.value - a.value);
     }
-  }, [reportTransactions, reportConfig.type, getCategoryEmoji, hasGeneratedReport]);
+  }, [reportTransactions, reportType, getCategoryEmoji]);
 
   const reportUnitOptions = useMemo(() => {
     let options: string[] = [];
@@ -786,25 +775,15 @@ function Dashboard() {
   }, [reportType, reportTransactionType, group?.customCategories, allGroupTags]);
 
   const unitSuggestions = useMemo(() => {
-    if (!unitSearchInput.trim()) return [];
     const input = unitSearchInput.toLowerCase();
-    return reportUnitOptions.filter(opt => 
+    const filtered = reportUnitOptions.filter(opt => 
       opt.toLowerCase().includes(input) && !reportUnitFilter.includes(opt)
-    ).slice(0, 5);
-  }, [unitSearchInput, reportUnitOptions, reportUnitFilter]);
-
-  const handleGenerateReport = () => {
-    setReportConfig({
-      type: reportType,
-      period: reportPeriod,
-      month: selectedMonth,
-      year: reportYear,
-      transactionType: reportTransactionType,
-      unitFilter: reportUnitFilter
-    });
-    setHasGeneratedReport(true);
-    toast.success('Reporte generado correctamente');
-  };
+    );
+    
+    if (isUnitDropdownOpen) return filtered;
+    if (unitSearchInput.trim()) return filtered.slice(0, 5);
+    return [];
+  }, [unitSearchInput, reportUnitOptions, reportUnitFilter, isUnitDropdownOpen]);
 
   const budgetProgress = useMemo(() => {
     if (!group?.budget) return null;
@@ -2446,14 +2425,27 @@ function Dashboard() {
                           <span className="text-[10px] text-gray-400 font-medium italic">Todos seleccionados</span>
                         )}
                       </div>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          value={unitSearchInput}
-                          onChange={(e) => setUnitSearchInput(e.target.value)}
-                          placeholder={`Buscar ${reportType === 'category' ? 'categoría' : reportType === 'tag' ? 'etiqueta' : 'pago'}...`}
-                          className="flex-1 bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
-                        />
+                      <div className="relative flex gap-2">
+                        <div className="relative flex-1">
+                          <input 
+                            type="text" 
+                            value={unitSearchInput}
+                            onChange={(e) => {
+                              setUnitSearchInput(e.target.value);
+                              if (!isUnitDropdownOpen) setIsUnitDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsUnitDropdownOpen(true)}
+                            placeholder={`Buscar ${reportType === 'category' ? 'categoría' : reportType === 'tag' ? 'etiqueta' : 'pago'}...`}
+                            className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 pl-3 pr-10 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setIsUnitDropdownOpen(!isUnitDropdownOpen)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#5A5A40] transition-colors"
+                          >
+                            <ChevronDown size={16} className={cn("transition-transform", isUnitDropdownOpen && "rotate-180")} />
+                          </button>
+                        </div>
                         {reportUnitFilter.length > 0 && (
                           <button 
                             onClick={() => setReportUnitFilter([])}
@@ -2465,46 +2457,52 @@ function Dashboard() {
                       </div>
 
                       {/* Unit Suggestions */}
-                      {unitSuggestions.length > 0 && (
-                        <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
-                          {unitSuggestions.map(suggestion => (
-                            <button
-                              key={suggestion}
-                              type="button"
-                              onClick={() => {
-                                setReportUnitFilter(prev => [...prev, suggestion]);
-                                setUnitSearchInput('');
-                              }}
-                              className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
-                            >
-                              {reportType === 'tag' ? `#${suggestion}` : suggestion}
-                            </button>
-                          ))}
-                        </div>
+                      {isUnitDropdownOpen && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-40" 
+                            onClick={() => setIsUnitDropdownOpen(false)}
+                          />
+                          <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden max-h-60 overflow-y-auto scrollbar-hide">
+                            {unitSuggestions.length > 0 ? (
+                              unitSuggestions.map(suggestion => (
+                                <button
+                                  key={suggestion}
+                                  type="button"
+                                  onClick={() => {
+                                    setReportUnitFilter(prev => [...prev, suggestion]);
+                                    setUnitSearchInput('');
+                                    // Keep open if user wants to select more? 
+                                    // Usually select one and close is standard for dropdowns, 
+                                    // but multi-select might want to stay open.
+                                    // Let's close it to be safe or keep it open for multi-select.
+                                    // User said "dropdown autocomplete", I'll keep it open for multi-select convenience.
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
+                                >
+                                  {reportType === 'tag' ? `#${suggestion}` : suggestion}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-4 py-3 text-xs text-gray-400 italic text-center">
+                                No hay más opciones disponibles
+                              </div>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
 
-                  <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-                    <button 
-                      onClick={handleGenerateReport}
-                      className="flex items-center gap-2 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-[#5A5A40]/20 hover:scale-105 active:scale-95 transition-all"
-                    >
-                      <Play size={16} fill="currentColor" />
-                      Generar Reporte
-                    </button>
-                  </div>
                 </div>
 
-                {hasGeneratedReport ? (
-                  <>
-                    {/* Summary Cards */}
+                {/* Summary Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total {reportConfig.transactionType === 'expense' ? 'Gastado' : 'Ingresado'}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total {reportTransactionType === 'expense' ? 'Gastado' : 'Ingresado'}</p>
                     <p className={cn(
                       "text-2xl font-black",
-                      reportConfig.transactionType === 'expense' ? "text-red-600" : "text-green-600"
+                      reportTransactionType === 'expense' ? "text-red-600" : "text-green-600"
                     )}>
                       {formatCurrency(reportTransactions.reduce((acc, t) => acc + t.amount, 0))}
                     </p>
@@ -2526,7 +2524,7 @@ function Dashboard() {
                 {reportDisplay === 'grouped' ? (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
-                      <h3 className="text-lg font-bold mb-6">Distribución por {reportConfig.type === 'category' ? 'Categoría' : reportConfig.type === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
+                      <h3 className="text-lg font-bold mb-6">Distribución por {reportType === 'category' ? 'Categoría' : reportType === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
                       <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
                           <RePieChart>
@@ -2552,7 +2550,7 @@ function Dashboard() {
                     </div>
 
                     <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
-                      <h3 className="text-lg font-bold mb-6">Ranking por {reportConfig.type === 'category' ? 'Categoría' : reportConfig.type === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
+                      <h3 className="text-lg font-bold mb-6">Ranking por {reportType === 'category' ? 'Categoría' : reportType === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
                       <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-hide">
                         {reportData.map((item, index) => (
                           <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl">
@@ -2614,16 +2612,6 @@ function Dashboard() {
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
-                  </>
-                ) : (
-                  <div className="bg-white dark:bg-gray-900 p-12 rounded-[40px] border border-dashed border-[#E4E3E0] dark:border-gray-800 text-center">
-                    <div className="w-20 h-20 bg-gray-50 dark:bg-gray-800 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                      <BarChart3 size={40} className="text-gray-200" />
-                    </div>
-                    <h3 className="text-xl font-bold mb-2">Configura tu reporte</h3>
-                    <p className="text-gray-400 max-w-xs mx-auto text-sm">Selecciona los filtros arriba y haz clic en "Generar Reporte" para ver el análisis.</p>
                   </div>
                 )}
               </div>
