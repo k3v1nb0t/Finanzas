@@ -23,6 +23,7 @@ export interface Group {
   budget?: number;
   categoryBudgets?: Record<string, number>;
   customCategories?: string[];
+  categoryEmojis?: Record<string, string>;
   createdAt: any;
 }
 
@@ -37,6 +38,7 @@ export interface RecurringExpense {
   description: string;
   dayOfMonth: number;
   paymentMethod: PaymentMethod;
+  tags?: string[];
   active: boolean;
   endDate?: string; // Format: YYYY-MM-DD
   status?: 'active' | 'finished';
@@ -56,6 +58,7 @@ export interface Transaction {
   paymentMethod?: PaymentMethod;
   isRecurring?: boolean;
   recurringId?: string;
+  tags?: string[];
   date: any;
   createdAt: any;
 }
@@ -79,4 +82,23 @@ export const PAYMENT_METHODS: PaymentMethod[] = ['Efectivo', 'Tarjeta', 'Transfe
 export const CATEGORIES = {
   income: ['Salario', 'Venta', 'Regalo', 'Inversión', 'Otros'],
   expense: ['Comida', 'Transporte', 'Vivienda', 'Servicios', 'Salud', 'Educación', 'Entretenimiento', 'Compras', 'Otros']
+};
+
+export const CATEGORY_EMOJIS: Record<string, string> = {
+  // Income
+  'Salario': '💰',
+  'Venta': '🏷️',
+  'Regalo': '🎁',
+  'Inversión': '📈',
+  'Otros': '✨',
+  // Expense
+  'Comida': '🍔',
+  'Transporte': '🚗',
+  'Vivienda': '🏠',
+  'Servicios': '⚡',
+  'Salud': '🏥',
+  'Educación': '📚',
+  'Entretenimiento': '🎬',
+  'Compras': '🛍️',
+  'Ahorro': '🐷'
 };

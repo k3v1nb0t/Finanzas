@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   PlusCircle,
   Pencil,
+  BarChart3,
   ArrowUpRight,
   ArrowDownRight,
   Trash2,
@@ -47,6 +48,7 @@ import {
   serverTimestamp, 
   deleteDoc, 
   doc,
+  getDoc,
   Timestamp,
   setDoc,
   limit,
@@ -55,7 +57,7 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Transaction, CATEGORIES, TransactionType, Group, UserProfile, PaymentMethod, PAYMENT_METHODS, RecurringExpense, SavingsGoal } from './types';
+import { Transaction, CATEGORIES, CATEGORY_EMOJIS, TransactionType, Group, UserProfile, PaymentMethod, PAYMENT_METHODS, RecurringExpense, SavingsGoal } from './types';
 import { formatCurrency, cn } from './lib/utils';
 import { handleFirestoreError, OperationType } from './lib/firestore-errors';
 import { format, isLastDayOfMonth, parse, subMonths } from 'date-fns';
@@ -73,6 +75,7 @@ import {
   Tooltip, 
   ResponsiveContainer, 
   Cell,
+  Legend,
   PieChart as RePieChart,
   Pie
 } from 'recharts';
@@ -102,6 +105,7 @@ function FinancialAssistant({ transactions, group }: { transactions: Transaction
         categoria: t.category,
         monto: t.amount,
         descripcion: t.description,
+        etiquetas: t.tags || [],
         fecha: format(t.date instanceof Timestamp ? t.date.toDate() : new Date(t.date), 'dd/MM/yyyy')
       }));
 
@@ -291,14 +295,38 @@ function Dashboard() {
   const [isAdding, setIsAdding] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'group' | 'recurring' | 'goals' | 'ai' | 'settings'>('dashboard');
+  const [isAddAmountModalOpen, setIsAddAmountModalOpen] = useState(false);
+  const [selectedGoalForAmount, setSelectedGoalForAmount] = useState<SavingsGoal | null>(null);
+  const [amountToAddInput, setAmountToAddInput] = useState('');
+  const [shouldRecordAsTransaction, setShouldRecordAsTransaction] = useState(true);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'reports' | 'group' | 'recurring' | 'goals' | 'ai' | 'settings'>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [reportType, setReportType] = useState<'category' | 'tag' | 'paymentMethod'>('category');
+  const [reportPeriod, setReportPeriod] = useState<'month' | 'year'>('month');
+  const [reportDisplay, setReportDisplay] = useState<'grouped' | 'detailed'>('grouped');
+  const [reportYear, setReportYear] = useState(new Date().getFullYear().toString());
+  const [reportTransactionType, setReportTransactionType] = useState<'expense' | 'income'>('expense');
+  const [reportUnitFilter, setReportUnitFilter] = useState<string[]>([]);
+  const [unitSearchInput, setUnitSearchInput] = useState('');
+  const [reportConfig, setReportConfig] = useState({
+    type: 'category' as 'category' | 'tag' | 'paymentMethod',
+    period: 'month' as 'month' | 'year',
+    month: format(new Date(), 'yyyy-MM'),
+    year: new Date().getFullYear().toString(),
+    transactionType: 'expense' as 'expense' | 'income',
+    unitFilter: [] as string[]
+  });
+  const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
 
   // Form state
   const [amount, setAmount] = useState('');
   const [budgetInput, setBudgetInput] = useState('');
   const [categoryBudgetsInput, setCategoryBudgetsInput] = useState<Record<string, string>>({});
+  const [categoryEmojisInput, setCategoryEmojisInput] = useState<Record<string, string>>({});
   const [customCategoriesInput, setCustomCategoriesInput] = useState<string[]>([]);
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [type, setType] = useState<TransactionType>('expense');
@@ -610,22 +638,29 @@ function Dashboard() {
     return unsubscribe;
   }, [profile?.groupId]);
 
+  const getCategoryEmoji = (cat: string) => {
+    return group?.categoryEmojis?.[cat] || CATEGORY_EMOJIS[cat] || '✨';
+  };
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
       const isMonthMatch = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
       
-      if (!searchQuery) return isMonthMatch;
+      const matchesTag = !selectedTagFilter || (t.tags || []).includes(selectedTagFilter);
+      
+      if (!searchQuery) return isMonthMatch && matchesTag;
       
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch = 
         (t.description || '').toLowerCase().includes(searchLower) ||
         (t.category || '').toLowerCase().includes(searchLower) ||
-        (t.userName || '').toLowerCase().includes(searchLower);
+        (t.userName || '').toLowerCase().includes(searchLower) ||
+        (t.tags || []).some(tag => tag.toLowerCase().includes(searchLower));
         
-      return isMonthMatch && matchesSearch;
+      return isMonthMatch && matchesSearch && matchesTag;
     });
-  }, [transactions, selectedMonth, searchQuery]);
+  }, [transactions, selectedMonth, searchQuery, selectedTagFilter]);
 
   const paymentMethodStats = useMemo(() => {
     const methods: Record<string, number> = {};
@@ -647,6 +682,129 @@ function Dashboard() {
       .reduce((sum, t) => sum + t.amount, 0);
     return { income, expense, balance: income - expense };
   }, [filteredTransactions]);
+
+  const allGroupTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    transactions.forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
+    recurringExpenses.forEach(re => (re.tags || []).forEach(tag => tagSet.add(tag)));
+    return Array.from(tagSet).sort();
+  }, [transactions, recurringExpenses]);
+
+  const tagSuggestions = useMemo(() => {
+    if (!tagInput.trim()) return [];
+    const input = tagInput.toLowerCase().replace('#', '');
+    return allGroupTags.filter(tag => 
+      tag.toLowerCase().includes(input) && !tags.includes(tag)
+    ).slice(0, 5);
+  }, [tagInput, allGroupTags, tags]);
+
+  const reportTransactions = useMemo(() => {
+    if (!hasGeneratedReport) return [];
+    
+    return transactions.filter(t => {
+      const tDate = t.date?.toDate ? t.date.toDate() : new Date(t.date);
+      const tYear = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy');
+      const tMonth = formatInTimeZone(tDate, GUATEMALA_TZ, 'yyyy-MM');
+      
+      const periodMatch = reportConfig.period === 'month' 
+        ? tMonth === reportConfig.month 
+        : tYear === reportConfig.year;
+        
+      if (!periodMatch || t.type !== reportConfig.transactionType) return false;
+
+      if (reportConfig.unitFilter.length > 0) {
+        if (reportConfig.type === 'category') {
+          return reportConfig.unitFilter.includes(t.category);
+        } else if (reportConfig.type === 'tag') {
+          return (t.tags || []).some(tag => reportConfig.unitFilter.includes(tag));
+        } else if (reportConfig.type === 'paymentMethod') {
+          return reportConfig.unitFilter.includes(t.paymentMethod || 'Otros');
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+      const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+      return dateB.getTime() - dateA.getTime();
+    });
+  }, [transactions, reportConfig, hasGeneratedReport]);
+
+  const reportData = useMemo(() => {
+    if (!hasGeneratedReport) return [];
+
+    if (reportConfig.type === 'category') {
+      const categories: Record<string, number> = {};
+      reportTransactions.forEach(t => {
+        categories[t.category] = (categories[t.category] || 0) + t.amount;
+      });
+      return Object.entries(categories).map(([name, value]) => ({ 
+        name: `${getCategoryEmoji(name)} ${name}`, 
+        value 
+      })).sort((a, b) => b.value - a.value);
+    } else if (reportConfig.type === 'tag') {
+      const tags: Record<string, number> = {};
+      reportTransactions.forEach(t => {
+        const tTags = t.tags || [];
+        if (tTags.length === 0) {
+          tags['Sin etiqueta'] = (tags['Sin etiqueta'] || 0) + t.amount;
+        } else {
+          tTags.forEach(tag => {
+            tags[tag] = (tags[tag] || 0) + t.amount;
+          });
+        }
+      });
+      return Object.entries(tags).map(([name, value]) => ({ 
+        name: name === 'Sin etiqueta' ? name : `#${name}`, 
+        value 
+      })).sort((a, b) => b.value - a.value);
+    } else {
+      const methods: Record<string, number> = {};
+      reportTransactions.forEach(t => {
+        const method = t.paymentMethod || 'Otros';
+        methods[method] = (methods[method] || 0) + t.amount;
+      });
+      return Object.entries(methods).map(([name, value]) => ({ 
+        name, 
+        value 
+      })).sort((a, b) => b.value - a.value);
+    }
+  }, [reportTransactions, reportConfig.type, getCategoryEmoji, hasGeneratedReport]);
+
+  const reportUnitOptions = useMemo(() => {
+    let options: string[] = [];
+    if (reportType === 'category') {
+      options = reportTransactionType === 'expense' 
+        ? [...CATEGORIES.expense, ...(group?.customCategories || [])] 
+        : CATEGORIES.income;
+    } else if (reportType === 'tag') {
+      options = allGroupTags;
+    } else if (reportType === 'paymentMethod') {
+      options = PAYMENT_METHODS;
+    }
+    return options;
+  }, [reportType, reportTransactionType, group?.customCategories, allGroupTags]);
+
+  const unitSuggestions = useMemo(() => {
+    if (!unitSearchInput.trim()) return [];
+    const input = unitSearchInput.toLowerCase();
+    return reportUnitOptions.filter(opt => 
+      opt.toLowerCase().includes(input) && !reportUnitFilter.includes(opt)
+    ).slice(0, 5);
+  }, [unitSearchInput, reportUnitOptions, reportUnitFilter]);
+
+  const handleGenerateReport = () => {
+    setReportConfig({
+      type: reportType,
+      period: reportPeriod,
+      month: selectedMonth,
+      year: reportYear,
+      transactionType: reportTransactionType,
+      unitFilter: reportUnitFilter
+    });
+    setHasGeneratedReport(true);
+    toast.success('Reporte generado correctamente');
+  };
 
   const budgetProgress = useMemo(() => {
     if (!group?.budget) return null;
@@ -711,7 +869,10 @@ function Dashboard() {
     filteredTransactions.filter(t => t.type === 'expense').forEach(t => {
       categories[t.category] = (categories[t.category] || 0) + t.amount;
     });
-    return Object.entries(categories).map(([name, value]) => ({ name, value }));
+    return Object.entries(categories).map(([name, value]) => ({ 
+      name: `${getCategoryEmoji(name)} ${name}`, 
+      value 
+    }));
   }, [filteredTransactions]);
 
   const handleAddTransaction = async (e: FormEvent) => {
@@ -725,6 +886,7 @@ function Dashboard() {
         type,
         category,
         description,
+        tags,
         paymentMethod: type === 'expense' ? paymentMethod : null,
         date: Timestamp.fromDate(fromZonedTime(date, GUATEMALA_TZ)),
         updatedAt: serverTimestamp(),
@@ -749,6 +911,7 @@ function Dashboard() {
       setAmount('');
       setCategory('');
       setDescription('');
+      setTags([]);
       setIsRecurring(false);
       setDate(format(new Date(), 'yyyy-MM-dd'));
     } catch (error) {
@@ -779,6 +942,7 @@ function Dashboard() {
         type: re.type || 'expense',
         category: re.category,
         description: `(Manual) ${re.description || re.category}`,
+        tags: re.tags || [],
         paymentMethod: re.type === 'income' ? null : re.paymentMethod,
         date: serverTimestamp(),
         createdAt: serverTimestamp(),
@@ -808,6 +972,7 @@ function Dashboard() {
         type,
         category,
         description,
+        tags,
         dayOfMonth: parseInt(dayOfMonth),
         paymentMethod: type === 'expense' ? paymentMethod : 'Otros',
         active: true,
@@ -832,6 +997,7 @@ function Dashboard() {
       setAmount('');
       setCategory('');
       setDescription('');
+      setTags([]);
       setEndDate('');
     } catch (error) {
       handleFirestoreError(error, editingRecurringId ? OperationType.UPDATE : OperationType.WRITE, `groups/${profile.groupId}/recurringExpenses`);
@@ -882,6 +1048,7 @@ function Dashboard() {
       await setDoc(doc(db, 'groups', profile.groupId), {
         budget: globalBudget,
         categoryBudgets,
+        categoryEmojis: categoryEmojisInput,
         customCategories: customCategoriesInput
       }, { merge: true });
       setIsBudgetModalOpen(false);
@@ -929,6 +1096,48 @@ function Dashboard() {
         }
       }
     });
+  };
+
+  const handleAddToGoal = async (goalId: string, amountToAdd: number, recordTransaction: boolean) => {
+    if (!profile?.groupId || !user || isNaN(amountToAdd) || amountToAdd <= 0) return;
+    
+    try {
+      const goalRef = doc(db, 'groups', profile.groupId, 'savingsGoals', goalId);
+      const goalSnap = await getDoc(goalRef);
+      if (!goalSnap.exists()) return;
+      
+      const goalData = goalSnap.data() as SavingsGoal;
+      const newAmount = goalData.currentAmount + amountToAdd;
+      
+      const batch = writeBatch(db);
+      
+      // Update goal amount
+      batch.set(goalRef, { currentAmount: newAmount }, { merge: true });
+      
+      if (recordTransaction) {
+        const txRef = doc(collection(db, 'groups', profile.groupId, 'transactions'));
+        batch.set(txRef, {
+          groupId: profile.groupId,
+          userId: user.uid,
+          userName: user.displayName || 'Usuario',
+          amount: amountToAdd,
+          type: 'expense',
+          category: 'Ahorro',
+          description: `Ahorro para meta: ${goalData.name}`,
+          paymentMethod: 'Otros',
+          date: serverTimestamp(),
+          createdAt: serverTimestamp()
+        });
+      }
+      
+      await batch.commit();
+      toast.success(`Se agregaron ${formatCurrency(amountToAdd)} a la meta${recordTransaction ? ' y al historial' : ''}`);
+      setIsAddAmountModalOpen(false);
+      setAmountToAddInput('');
+      setSelectedGoalForAmount(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `groups/${profile.groupId}/savingsGoals/${goalId}`);
+    }
   };
 
   const handleSaveGoal = async (e: FormEvent) => {
@@ -1228,6 +1437,26 @@ function Dashboard() {
               </button>
             )}
             <button 
+              onClick={() => setActiveTab('group')}
+              className={cn(
+                "w-10 h-10 flex items-center justify-center rounded-xl transition-all",
+                activeTab === 'group' ? "bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B]" : "bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B]"
+              )}
+              title="Familia"
+            >
+              <Users size={20} />
+            </button>
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className={cn(
+                "w-10 h-10 flex items-center justify-center rounded-xl transition-all",
+                activeTab === 'settings' ? "bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B]" : "bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B]"
+              )}
+              title="Ajustes"
+            >
+              <Settings size={20} />
+            </button>
+            <button 
               onClick={() => setIsDarkMode(prev => !prev)}
               className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl transition-all"
               title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
@@ -1316,11 +1545,14 @@ function Dashboard() {
                     onClick={() => {
                       setBudgetInput(group?.budget?.toString() || '');
                       const initialCategoryBudgets: Record<string, string> = {};
-                      const allCategories = [...CATEGORIES.expense, ...(group?.customCategories || [])];
+                      const initialCategoryEmojis: Record<string, string> = {};
+                      const allCategories = [...CATEGORIES.expense, ...CATEGORIES.income, ...(group?.customCategories || [])];
                       allCategories.forEach(cat => {
                         initialCategoryBudgets[cat] = group?.categoryBudgets?.[cat]?.toString() || '';
+                        initialCategoryEmojis[cat] = group?.categoryEmojis?.[cat] || CATEGORY_EMOJIS[cat] || '';
                       });
                       setCategoryBudgetsInput(initialCategoryBudgets);
+                      setCategoryEmojisInput(initialCategoryEmojis);
                       setCustomCategoriesInput(group?.customCategories || []);
                       setIsBudgetModalOpen(true);
                     }}
@@ -1364,10 +1596,13 @@ function Dashboard() {
                       onClick={() => {
                         setBudgetInput('');
                         const initialCategoryBudgets: Record<string, string> = {};
-                        CATEGORIES.expense.forEach(cat => {
+                        const initialCategoryEmojis: Record<string, string> = {};
+                        [...CATEGORIES.expense, ...CATEGORIES.income].forEach(cat => {
                           initialCategoryBudgets[cat] = '';
+                          initialCategoryEmojis[cat] = CATEGORY_EMOJIS[cat] || '';
                         });
                         setCategoryBudgetsInput(initialCategoryBudgets);
+                        setCategoryEmojisInput(initialCategoryEmojis);
                         setCustomCategoriesInput([]);
                         setIsBudgetModalOpen(true);
                       }}
@@ -1385,7 +1620,9 @@ function Dashboard() {
                       {categoryBudgetProgress.map((item) => (
                         <div key={item.category} className="space-y-2">
                           <div className="flex justify-between items-center">
-                            <p className="text-sm font-bold text-gray-700">{item.category}</p>
+                            <p className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                              {getCategoryEmoji(item.category)} {item.category}
+                            </p>
                             <p className="text-xs font-bold text-gray-400">{Math.round((item.spent / item.budget) * 100)}%</p>
                           </div>
                           <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -1504,10 +1741,10 @@ function Dashboard() {
                     <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                       <div className="flex items-center gap-4">
                         <div className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center",
-                          tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+                          "w-10 h-10 rounded-full flex items-center justify-center text-xl",
+                          tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
                         )}>
-                          {tx.type === 'income' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
+                          {getCategoryEmoji(tx.category)}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
@@ -1518,9 +1755,14 @@ function Dashboard() {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500">
-                            {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'dd MMM', { locale: es })} • {tx.userName}
-                          </p>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            <p className="text-[10px] text-gray-500">
+                              {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'dd MMM', { locale: es })} • {tx.userName}
+                            </p>
+                            {(tx.tags || []).map(tag => (
+                              <span key={tag} className="text-[8px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
+                            ))}
+                          </div>
                         </div>
                       </div>
                       <p className={cn(
@@ -1549,27 +1791,84 @@ function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h2 className="text-2xl font-bold">Historial del Mes</h2>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input 
-                      type="text"
-                      placeholder="Buscar descripción..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-[#5A5A40] outline-none transition-all dark:text-white"
-                    />
+              <div className="flex flex-col gap-6 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h2 className="text-2xl font-bold">Historial del Mes</h2>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 sm:w-64">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input 
+                        type="text"
+                        placeholder="Buscar descripción o etiqueta..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-[#5A5A40] outline-none transition-all dark:text-white"
+                      />
+                    </div>
+                    <button 
+                      onClick={exportToCSV}
+                      className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <ArrowDownRight size={14} />
+                      Exportar CSV
+                    </button>
                   </div>
-                  <button 
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <ArrowDownRight size={14} />
-                    Exportar CSV
-                  </button>
                 </div>
+
+                {/* Tag Filter */}
+                {(() => {
+                  const allTags = Array.from(new Set(transactions.flatMap(t => t.tags || [])));
+                  if (allTags.length === 0) return null;
+
+                  // Calculate spending by tag
+                  const spendingByTag: Record<string, number> = {};
+                  filteredTransactions.filter(t => t.type === 'expense').forEach(t => {
+                    (t.tags || []).forEach(tag => {
+                      spendingByTag[tag] = (spendingByTag[tag] || 0) + t.amount;
+                    });
+                  });
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mr-2">Filtrar por etiqueta:</p>
+                        <button 
+                          onClick={() => setSelectedTagFilter(null)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
+                            !selectedTagFilter ? "bg-[#5A5A40] text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                          )}
+                        >
+                          Todas
+                        </button>
+                        {allTags.map(tag => (
+                          <button 
+                            key={tag}
+                            onClick={() => setSelectedTagFilter(selectedTagFilter === tag ? null : tag)}
+                            className={cn(
+                              "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
+                              selectedTagFilter === tag ? "bg-[#5A5A40] text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                            )}
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Tag Spending Summary */}
+                      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                        {Object.entries(spendingByTag)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([tag, amount]) => (
+                            <div key={tag} className="flex-shrink-0 bg-white dark:bg-gray-900 px-4 py-3 rounded-2xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">#{tag}</p>
+                              <p className="text-sm font-black text-[#5A5A40] dark:text-[#8B8B6B]">{formatCurrency(amount)}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
                 <div className="divide-y divide-[#E4E3E0] dark:divide-gray-800">
@@ -1577,16 +1876,16 @@ function Dashboard() {
                     <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 group gap-2 sm:gap-3">
                       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                         <div className={cn(
-                          "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex-shrink-0 flex items-center justify-center",
-                          tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+                          "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg sm:text-xl",
+                          tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
                         )}>
-                          {tx.type === 'income' ? <ArrowUpRight size={18} className="sm:w-5 sm:h-5" /> : <ArrowDownRight size={18} className="sm:w-5 sm:h-5" />}
+                          {getCategoryEmoji(tx.category)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="font-medium text-sm sm:text-base truncate">{tx.description || tx.category}</p>
-                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded">
-                              {tx.category}
+                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded flex items-center gap-1">
+                              {getCategoryEmoji(tx.category)} {tx.category}
                             </span>
                             {tx.isRecurring && (
                               <span className="bg-[#5A5A40]/10 text-[#5A5A40] text-[7px] sm:text-[8px] font-black uppercase px-1 py-0.5 rounded tracking-tighter flex-shrink-0 flex items-center gap-0.5">
@@ -1594,11 +1893,18 @@ function Dashboard() {
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] sm:text-xs text-gray-500">
-                            <span className="sm:hidden">{formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'dd/MM/yy')}</span>
-                            <span className="hidden sm:inline">{formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'PPP', { locale: es })}</span>
-                            {` • ${tx.userName}`}
-                          </p>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center">
+                            <p className="text-[10px] sm:text-xs text-gray-500">
+                              <span className="sm:hidden">{formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'dd/MM/yy')}</span>
+                              <span className="hidden sm:inline">{formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'PPP', { locale: es })}</span>
+                              {` • ${tx.userName}`}
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {(tx.tags || []).map(tag => (
+                                <span key={tag} className="text-[8px] sm:text-[9px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3 flex-shrink-0 text-right">
@@ -1617,6 +1923,7 @@ function Dashboard() {
                                 setType(tx.type);
                                 setCategory(tx.category);
                                 setDescription(tx.description || '');
+                                setTags(tx.tags || []);
                                 setPaymentMethod(tx.paymentMethod || 'Efectivo');
                                 setDate(formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'yyyy-MM-dd'));
                                 setIsAdding(true);
@@ -1839,6 +2146,22 @@ function Dashboard() {
                         </div>
                         <div className="flex items-center">
                           <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedGoalForAmount(goal);
+                              setAmountToAddInput('');
+                              setShouldRecordAsTransaction(true);
+                              setIsAddAmountModalOpen(true);
+                            }}
+                            className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-xl transition-colors z-10"
+                            title="Agregar ahorro"
+                          >
+                            <PlusCircle size={20} />
+                          </button>
+                          <button 
+                            type="button"
                             onClick={() => {
                               setEditingGoalId(goal.id);
                               setGoalName(goal.name);
@@ -1916,15 +2239,20 @@ function Dashboard() {
                 {recurringExpenses.map((re) => (
                   <div key={re.id} className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl flex-shrink-0 flex items-center justify-center text-[#5A5A40] dark:text-[#8B8B6B]">
-                        <CalendarDays size={20} className="sm:w-6 sm:h-6" />
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl flex-shrink-0 flex items-center justify-center text-lg sm:text-xl">
+                        {getCategoryEmoji(re.category)}
                       </div>
                       <div className="min-w-0">
                         <p className="font-bold truncate">{re.description || re.category}</p>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate">
                             Día {re.dayOfMonth} • {re.paymentMethod}
                           </p>
+                          <div className="flex flex-wrap gap-1">
+                            {(re.tags || []).map(tag => (
+                              <span key={tag} className="text-[8px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
+                            ))}
+                          </div>
                           {re.status === 'finished' && (
                             <span className="text-[8px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter flex-shrink-0">Finalizado</span>
                           )}
@@ -1958,6 +2286,7 @@ function Dashboard() {
                             setType(re.type || 'expense');
                             setCategory(re.category);
                             setDescription(re.description);
+                            setTags(re.tags || []);
                             setDayOfMonth(re.dayOfMonth.toString());
                             setPaymentMethod(re.paymentMethod);
                             setEndDate(re.endDate || '');
@@ -1981,6 +2310,320 @@ function Dashboard() {
                   <div className="bg-white p-12 rounded-[32px] border border-dashed border-gray-300 text-center">
                     <Repeat size={48} className="mx-auto text-gray-200 mb-4" />
                     <p className="text-gray-400 font-medium">No tienes gastos fijos configurados.</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+          {activeTab === 'reports' && (
+            <motion.div 
+              key="reports"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">Reportes</h2>
+                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Análisis detallado de tus finanzas</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                    <button 
+                      onClick={() => setReportPeriod('month')}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        reportPeriod === 'month' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                      )}
+                    >
+                      Mensual
+                    </button>
+                    <button 
+                      onClick={() => setReportPeriod('year')}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                        reportPeriod === 'year' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                      )}
+                    >
+                      Anual
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filters */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Tipo de Reporte</label>
+                    <select 
+                      value={reportType}
+                      onChange={(e) => setReportType(e.target.value as any)}
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    >
+                      <option value="category">Por Categoría</option>
+                      <option value="tag">Por Etiqueta</option>
+                      <option value="paymentMethod">Por Forma de Pago</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Transacciones</label>
+                    <select 
+                      value={reportTransactionType}
+                      onChange={(e) => setReportTransactionType(e.target.value as any)}
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    >
+                      <option value="expense">Gastos</option>
+                      <option value="income">Ingresos</option>
+                    </select>
+                  </div>
+
+                  {reportPeriod === 'month' ? (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Mes</label>
+                      <input 
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Año</label>
+                      <select 
+                        value={reportYear}
+                        onChange={(e) => setReportYear(e.target.value)}
+                        className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                      >
+                        {Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString()).map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Vista</label>
+                    <div className="flex bg-gray-50 dark:bg-gray-800 p-1 rounded-xl">
+                      <button 
+                        onClick={() => setReportDisplay('grouped')}
+                        className={cn(
+                          "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
+                          reportDisplay === 'grouped' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                        )}
+                      >
+                        Agrupado
+                      </button>
+                      <button 
+                        onClick={() => setReportDisplay('detailed')}
+                        className={cn(
+                          "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
+                          reportDisplay === 'detailed' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                        )}
+                      >
+                        Detallado
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      Filtrar {reportType === 'category' ? 'Categorías' : reportType === 'tag' ? 'Etiquetas' : 'Pagos'}
+                    </label>
+                    <div className="relative">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {reportUnitFilter.map(unit => (
+                          <span key={unit} className="bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                            {reportType === 'tag' ? `#${unit}` : unit}
+                            <button onClick={() => setReportUnitFilter(prev => prev.filter(u => u !== unit))}>
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                        {reportUnitFilter.length === 0 && (
+                          <span className="text-[10px] text-gray-400 font-medium italic">Todos seleccionados</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={unitSearchInput}
+                          onChange={(e) => setUnitSearchInput(e.target.value)}
+                          placeholder={`Buscar ${reportType === 'category' ? 'categoría' : reportType === 'tag' ? 'etiqueta' : 'pago'}...`}
+                          className="flex-1 bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                        />
+                        {reportUnitFilter.length > 0 && (
+                          <button 
+                            onClick={() => setReportUnitFilter([])}
+                            className="text-[10px] font-bold text-red-500 hover:underline"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Unit Suggestions */}
+                      {unitSuggestions.length > 0 && (
+                        <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+                          {unitSuggestions.map(suggestion => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              onClick={() => {
+                                setReportUnitFilter(prev => [...prev, suggestion]);
+                                setUnitSearchInput('');
+                              }}
+                              className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
+                            >
+                              {reportType === 'tag' ? `#${suggestion}` : suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
+                    <button 
+                      onClick={handleGenerateReport}
+                      className="flex items-center gap-2 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-[#5A5A40]/20 hover:scale-105 active:scale-95 transition-all"
+                    >
+                      <Play size={16} fill="currentColor" />
+                      Generar Reporte
+                    </button>
+                  </div>
+                </div>
+
+                {hasGeneratedReport ? (
+                  <>
+                    {/* Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total {reportConfig.transactionType === 'expense' ? 'Gastado' : 'Ingresado'}</p>
+                    <p className={cn(
+                      "text-2xl font-black",
+                      reportConfig.transactionType === 'expense' ? "text-red-600" : "text-green-600"
+                    )}>
+                      {formatCurrency(reportTransactions.reduce((acc, t) => acc + t.amount, 0))}
+                    </p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Transacciones</p>
+                    <p className="text-2xl font-black text-gray-900 dark:text-white">
+                      {reportTransactions.length}
+                    </p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Promedio por Tx</p>
+                    <p className="text-2xl font-black text-gray-900 dark:text-white">
+                      {formatCurrency(reportTransactions.length > 0 ? reportTransactions.reduce((acc, t) => acc + t.amount, 0) / reportTransactions.length : 0)}
+                    </p>
+                  </div>
+                </div>
+
+                {reportDisplay === 'grouped' ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                      <h3 className="text-lg font-bold mb-6">Distribución por {reportConfig.type === 'category' ? 'Categoría' : reportConfig.type === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
+                      <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RePieChart>
+                            <Pie
+                              data={reportData}
+                              innerRadius={80}
+                              outerRadius={100}
+                              paddingAngle={5}
+                              dataKey="value"
+                            >
+                              {reportData.map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={['#5A5A40', '#8B8B6B', '#A8A88F', '#C4C4B3', '#E1E1D7'][index % 5]} />
+                              ))}
+                            </Pie>
+                            <Tooltip 
+                              contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                              formatter={(value: number) => formatCurrency(value)}
+                            />
+                            <Legend />
+                          </RePieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                      <h3 className="text-lg font-bold mb-6">Ranking por {reportConfig.type === 'category' ? 'Categoría' : reportConfig.type === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
+                      <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-hide">
+                        {reportData.map((item, index) => (
+                          <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl">
+                            <div className="flex items-center gap-3">
+                              <span className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-900 rounded-full text-[10px] font-black text-[#5A5A40] dark:text-[#8B8B6B] shadow-sm">
+                                {index + 1}
+                              </span>
+                              <p className="text-sm font-bold">{item.name}</p>
+                            </div>
+                            <p className="text-sm font-black text-[#5A5A40] dark:text-[#8B8B6B]">{formatCurrency(item.value)}</p>
+                          </div>
+                        ))}
+                        {reportData.length === 0 && (
+                          <div className="py-12 text-center">
+                            <p className="text-gray-400 text-sm">No hay datos para este periodo</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white dark:bg-gray-900 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm overflow-hidden">
+                    <div className="divide-y divide-[#E4E3E0] dark:divide-gray-800">
+                      {reportTransactions.map(tx => (
+                        <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className={cn(
+                              "w-10 h-10 rounded-full flex items-center justify-center text-xl",
+                              tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
+                            )}>
+                              {getCategoryEmoji(tx.category)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-sm">{tx.description || tx.category}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-[10px] text-gray-400">
+                                  {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'dd MMM yyyy', { locale: es })}
+                                </p>
+                                <div className="flex gap-1">
+                                  {(tx.tags || []).map(tag => (
+                                    <span key={tag} className="text-[8px] font-bold text-[#5A5A40] dark:text-[#8B8B6B]">#{tag}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <p className={cn(
+                            "font-black text-sm",
+                            tx.type === 'income' ? "text-green-600" : "text-red-600"
+                          )}>
+                            {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                          </p>
+                        </div>
+                      ))}
+                      {reportTransactions.length === 0 && (
+                        <div className="py-20 text-center">
+                          <BarChart3 size={48} className="mx-auto text-gray-200 mb-4" />
+                          <p className="text-gray-400 font-medium">No hay transacciones para este periodo</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                  </>
+                ) : (
+                  <div className="bg-white dark:bg-gray-900 p-12 rounded-[40px] border border-dashed border-[#E4E3E0] dark:border-gray-800 text-center">
+                    <div className="w-20 h-20 bg-gray-50 dark:bg-gray-800 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                      <BarChart3 size={40} className="text-gray-200" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Configura tu reporte</h3>
+                    <p className="text-gray-400 max-w-xs mx-auto text-sm">Selecciona los filtros arriba y haz clic en "Generar Reporte" para ver el análisis.</p>
                   </div>
                 )}
               </div>
@@ -2045,22 +2688,6 @@ function Dashboard() {
           </button>
 
           <button 
-            onClick={() => setActiveTab('goals')}
-            className={cn(
-              "flex flex-col items-center gap-1.5 transition-all duration-300",
-              activeTab === 'goals' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
-            )}
-          >
-            <div className={cn(
-              "p-1 rounded-xl transition-colors",
-              activeTab === 'goals' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
-            )}>
-              <Target size={22} />
-            </div>
-            <span className="text-[9px] font-black uppercase tracking-widest">Metas</span>
-          </button>
-
-          <button 
             onClick={() => setActiveTab('recurring')}
             className={cn(
               "flex flex-col items-center gap-1.5 transition-all duration-300",
@@ -2090,6 +2717,38 @@ function Dashboard() {
           </div>
 
           <button 
+            onClick={() => setActiveTab('goals')}
+            className={cn(
+              "flex flex-col items-center gap-1.5 transition-all duration-300",
+              activeTab === 'goals' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
+            )}
+          >
+            <div className={cn(
+              "p-1 rounded-xl transition-colors",
+              activeTab === 'goals' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
+            )}>
+              <Target size={22} />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest">Metas</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('reports')}
+            className={cn(
+              "flex flex-col items-center gap-1.5 transition-all duration-300",
+              activeTab === 'reports' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
+            )}
+          >
+            <div className={cn(
+              "p-1 rounded-xl transition-colors",
+              activeTab === 'reports' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
+            )}>
+              <BarChart3 size={22} />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest">Reportes</span>
+          </button>
+
+          <button 
             onClick={() => setActiveTab('ai')}
             className={cn(
               "flex flex-col items-center gap-1.5 transition-all duration-300",
@@ -2104,40 +2763,85 @@ function Dashboard() {
             </div>
             <span className="text-[9px] font-black uppercase tracking-widest">IA</span>
           </button>
-
-          <button 
-            onClick={() => setActiveTab('group')}
-            className={cn(
-              "flex flex-col items-center gap-1.5 transition-all duration-300",
-              activeTab === 'group' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
-            )}
-          >
-            <div className={cn(
-              "p-1 rounded-xl transition-colors",
-              activeTab === 'group' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
-            )}>
-              <Users size={22} />
-            </div>
-            <span className="text-[9px] font-black uppercase tracking-widest">Familia</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('settings')}
-            className={cn(
-              "flex flex-col items-center gap-1.5 transition-all duration-300",
-              activeTab === 'settings' ? "text-[#5A5A40] dark:text-[#8B8B6B] scale-110" : "text-gray-400"
-            )}
-          >
-            <div className={cn(
-              "p-1 rounded-xl transition-colors",
-              activeTab === 'settings' ? "bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10" : ""
-            )}>
-              <Settings size={22} />
-            </div>
-            <span className="text-[9px] font-black uppercase tracking-widest">Ajustes</span>
-          </button>
         </div>
       </nav>
+
+      {/* Add Amount to Goal Modal */}
+      <AnimatePresence>
+        {isAddAmountModalOpen && selectedGoalForAmount && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold dark:text-white">Agregar Ahorro</h3>
+                  <button onClick={() => setIsAddAmountModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-2">Meta: <span className="font-bold text-gray-900 dark:text-white">{selectedGoalForAmount.name}</span></p>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Monto a agregar</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Q</span>
+                      <input 
+                        type="number"
+                        value={amountToAddInput}
+                        onChange={(e) => setAmountToAddInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-10 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl text-xl font-black focus:ring-2 focus:ring-[#5A5A40] outline-none transition-all dark:text-white"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-amber-50 dark:bg-amber-900/10 rounded-2xl border border-amber-100 dark:border-amber-900/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3">
+                        <div className="p-2 bg-amber-100 dark:bg-amber-900/20 rounded-xl text-amber-600 dark:text-amber-400">
+                          <History size={18} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold dark:text-white">¿Registrar en historial?</p>
+                          <p className="text-[10px] text-gray-500">Afectará tu presupuesto mensual disponible.</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setShouldRecordAsTransaction(!shouldRecordAsTransaction)}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${shouldRecordAsTransaction ? 'bg-[#5A5A40]' : 'bg-gray-300 dark:bg-gray-700'}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${shouldRecordAsTransaction ? 'translate-x-6' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button 
+                      onClick={() => setIsAddAmountModalOpen(false)}
+                      className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-2xl font-bold hover:bg-gray-200 transition-colors"
+                    >
+                      No
+                    </button>
+                    <button 
+                      onClick={() => handleAddToGoal(selectedGoalForAmount.id, parseFloat(amountToAddInput), shouldRecordAsTransaction)}
+                      disabled={!amountToAddInput || parseFloat(amountToAddInput) <= 0}
+                      className="flex-1 py-4 bg-[#5A5A40] text-white rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors disabled:opacity-50"
+                    >
+                      Sí, Agregar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Goal Modal */}
       <AnimatePresence>
@@ -2434,11 +3138,21 @@ function Dashboard() {
                   </div>
 
                   <div className="space-y-4">
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">Presupuesto por Categoría (Opcional)</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">Presupuesto por Categoría y Emojis</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {[...CATEGORIES.expense, ...customCategoriesInput].map(cat => (
-                        <div key={cat}>
-                          <label className="block text-[10px] font-bold text-gray-500 mb-1">{cat}</label>
+                      {[...CATEGORIES.expense, ...CATEGORIES.income, ...customCategoriesInput].map(cat => (
+                        <div key={cat} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[10px] font-bold text-gray-500">{cat}</label>
+                            <input 
+                              type="text"
+                              maxLength={2}
+                              value={categoryEmojisInput[cat] || ''}
+                              onChange={(e) => setCategoryEmojisInput(prev => ({ ...prev, [cat]: e.target.value }))}
+                              placeholder="Emoji"
+                              className="w-10 h-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border-none focus:ring-2 focus:ring-[#5A5A40] text-sm"
+                            />
+                          </div>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">Q</span>
                             <input 
@@ -2579,7 +3293,9 @@ function Dashboard() {
                     >
                       <option value="" className="dark:bg-gray-900">Seleccionar</option>
                       {(type === 'expense' ? [...CATEGORIES.expense, ...(group?.customCategories || [])] : CATEGORIES.income).map(cat => (
-                        <option key={cat} value={cat} className="dark:bg-gray-900">{cat}</option>
+                        <option key={cat} value={cat} className="dark:bg-gray-900">
+                          {getCategoryEmoji(cat)} {cat}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -2671,6 +3387,80 @@ function Dashboard() {
                     className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                     placeholder={isRecurring ? "Ej. Pago de Hipoteca" : "Ej. Almuerzo en el trabajo"}
                   />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Etiquetas (Opcional)</label>
+                  <div className="relative">
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+                              setTags([...tags, tagInput.trim()]);
+                              setTagInput('');
+                            }
+                          }
+                        }}
+                        className="flex-1 bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                        placeholder="Ej. #restaurante, #dominguito"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+                            setTags([...tags, tagInput.trim()]);
+                            setTagInput('');
+                          }
+                        }}
+                        className="bg-[#5A5A40] text-white px-4 rounded-xl text-xs font-bold"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+
+                    {/* Tag Suggestions */}
+                    {tagSuggestions.length > 0 && (
+                      <div className="absolute z-50 bottom-full mb-2 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+                        <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Sugerencias</p>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto">
+                          {tagSuggestions.map(suggestion => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              onClick={() => {
+                                setTags([...tags, suggestion]);
+                                setTagInput('');
+                              }}
+                              className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
+                            >
+                              #{suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map(tag => (
+                      <span key={tag} className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        #{tag}
+                        <button 
+                          type="button"
+                          onClick={() => setTags(tags.filter(t => t !== tag))}
+                          className="hover:text-red-500"
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
                 <button 
