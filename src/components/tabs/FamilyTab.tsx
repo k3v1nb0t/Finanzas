@@ -1,4 +1,4 @@
-import { Users, Plus, User, Trash2, ArrowUpRight } from 'lucide-react';
+import { Users, Plus, User, Trash2, ArrowUpRight, Share2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { Group, UserProfile } from '../../types';
@@ -63,7 +63,7 @@ export function FamilyTab({
               }}
               className="ml-auto p-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
             >
-              <Plus size={18} className="rotate-45" />
+              <Share2 size={18} />
             </button>
           </div>
           

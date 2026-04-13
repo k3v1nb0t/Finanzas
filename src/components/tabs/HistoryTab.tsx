@@ -174,7 +174,7 @@ export function HistoryTab({
                       {` • ${tx.userName}`}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {(tx.tags || []).map(tag => (
+                      {Array.from(new Set(tx.tags || [])).map(tag => (
                         <span key={tag} className="text-[8px] sm:text-[9px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
                       ))}
                     </div>

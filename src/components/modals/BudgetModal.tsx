@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 import { CATEGORIES } from '../../types';
 import { cn, formatCurrency } from '../../lib/utils';
 
@@ -110,9 +111,12 @@ export function BudgetModal({
                     <button 
                       type="button"
                       onClick={() => {
-                        if (newCategoryInput.trim()) {
-                          setCustomCategoriesInput(prev => [...prev, newCategoryInput.trim()]);
+                        const trimmedCat = newCategoryInput.trim();
+                        if (trimmedCat && !customCategoriesInput.includes(trimmedCat) && !CATEGORIES.expense.includes(trimmedCat) && !CATEGORIES.income.includes(trimmedCat)) {
+                          setCustomCategoriesInput(prev => [...prev, trimmedCat]);
                           setNewCategoryInput('');
+                        } else if (trimmedCat) {
+                          toast.error('Esta categoría ya existe');
                         }
                       }}
                       className="bg-[#5A5A40] text-white px-4 py-2 rounded-xl text-sm font-bold"
@@ -146,7 +150,7 @@ export function BudgetModal({
                 <div className="space-y-4">
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">Presupuesto por Categoría y Emojis</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[...CATEGORIES.expense, ...CATEGORIES.income, ...customCategoriesInput].map(cat => (
+                    {Array.from(new Set([...CATEGORIES.expense, ...CATEGORIES.income, ...customCategoriesInput])).map(cat => (
                       <div key={cat} className="space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="block text-[10px] font-bold text-gray-500">{cat}</label>

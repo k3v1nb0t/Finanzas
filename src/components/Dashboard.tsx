@@ -115,7 +115,7 @@ export function Dashboard() {
   const [amountToAddInput, setAmountToAddInput] = useState('');
   const [shouldRecordAsTransaction, setShouldRecordAsTransaction] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'reports' | 'group' | 'recurring' | 'goals' | 'ai' | 'settings'>('dashboard');
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [selectedMonth, setSelectedMonth] = useState(formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM'));
   const [reportType, setReportType] = useState<'category' | 'tag' | 'paymentMethod'>('category');
   const [reportPeriod, setReportPeriod] = useState<'month' | 'year'>('month');
   const [reportDisplay, setReportDisplay] = useState<'grouped' | 'detailed'>('grouped');
@@ -222,8 +222,7 @@ export function Dashboard() {
     if (!profile?.groupId) return;
 
     const q = query(
-      collection(db, 'transactions'),
-      where('groupId', '==', profile.groupId),
+      collection(db, 'groups', profile.groupId, 'transactions'),
       orderBy('date', 'desc')
     );
 
@@ -234,7 +233,7 @@ export function Dashboard() {
       } as Transaction));
       setTransactions(txs);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'transactions');
+      handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/transactions`);
     });
 
     return unsubscribe;
@@ -245,8 +244,7 @@ export function Dashboard() {
     if (!profile?.groupId) return;
 
     const q = query(
-      collection(db, 'recurring'),
-      where('groupId', '==', profile.groupId)
+      collection(db, 'groups', profile.groupId, 'recurringExpenses')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -256,7 +254,7 @@ export function Dashboard() {
       } as RecurringExpense));
       setRecurringExpenses(rec);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'recurring');
+      handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/recurringExpenses`);
     });
 
     return unsubscribe;
@@ -267,8 +265,7 @@ export function Dashboard() {
     if (!profile?.groupId) return;
 
     const q = query(
-      collection(db, 'goals'),
-      where('groupId', '==', profile.groupId),
+      collection(db, 'groups', profile.groupId, 'savingsGoals'),
       orderBy('createdAt', 'desc')
     );
 
@@ -279,7 +276,7 @@ export function Dashboard() {
       } as SavingsGoal));
       setSavingsGoals(goals);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'goals');
+      handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/savingsGoals`);
     });
 
     return unsubscribe;
@@ -287,10 +284,10 @@ export function Dashboard() {
 
   // Process recurring expenses at the start of the month
   useEffect(() => {
-    if (!profile?.groupId || recurringExpenses.length === 0 || hasProcessedRecurring) return;
+    if (!profile?.groupId || recurringExpenses.length === 0 || hasProcessedRecurring || !user) return;
 
     const processRecurring = async () => {
-      const currentMonth = format(new Date(), 'yyyy-MM');
+      const currentMonth = formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM');
       const batch = writeBatch(db);
       let hasChanges = false;
 
@@ -298,15 +295,19 @@ export function Dashboard() {
         if (!rec.active) continue;
         if (rec.lastProcessedMonth === currentMonth) continue;
         
+        // Check if the day of the month has arrived
+        const currentDay = parseInt(formatInTimeZone(new Date(), GUATEMALA_TZ, 'd'));
+        if (rec.dayOfMonth > currentDay) continue;
+        
         // Check if end date has passed
         if (rec.endDate && rec.endDate < format(new Date(), 'yyyy-MM-dd')) {
-          batch.update(doc(db, 'recurring', rec.id), { active: false, status: 'finished' });
+          batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', rec.id), { active: false, status: 'finished' });
           hasChanges = true;
           continue;
         }
 
         // Create transaction for this month
-        const txId = doc(collection(db, 'transactions')).id;
+        const txId = doc(collection(db, 'groups', profile.groupId, 'transactions')).id;
         const txDate = new Date();
         txDate.setDate(rec.dayOfMonth);
         
@@ -322,8 +323,8 @@ export function Dashboard() {
         const newTx: Transaction = {
           id: txId,
           groupId: profile.groupId,
-          userId: 'system',
-          userName: 'Sistema (Fijo)',
+          userId: user.uid,
+          userName: `Sistema (${user.displayName || user.email})`,
           amount: rec.amount,
           type: rec.type,
           category: rec.category,
@@ -336,8 +337,8 @@ export function Dashboard() {
           createdAt: serverTimestamp(),
         };
 
-        batch.set(doc(db, 'transactions', txId), newTx);
-        batch.update(doc(db, 'recurring', rec.id), { lastProcessedMonth: currentMonth });
+        batch.set(doc(db, 'groups', profile.groupId, 'transactions', txId), newTx);
+        batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', rec.id), { lastProcessedMonth: currentMonth });
         hasChanges = true;
       }
 
@@ -353,12 +354,12 @@ export function Dashboard() {
     };
 
     processRecurring();
-  }, [profile?.groupId, recurringExpenses, hasProcessedRecurring]);
+  }, [profile?.groupId, recurringExpenses, hasProcessedRecurring, user]);
 
   const stats = useMemo(() => {
     const monthTxs = transactions.filter(tx => {
       const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
-      return format(txDate, 'yyyy-MM') === selectedMonth;
+      return formatInTimeZone(txDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
     });
 
     const income = monthTxs.filter(tx => tx.type === 'income').reduce((acc, tx) => acc + tx.amount, 0);
@@ -422,7 +423,7 @@ export function Dashboard() {
   const filteredTransactions = useMemo(() => {
     let filtered = transactions.filter(tx => {
       const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
-      return format(txDate, 'yyyy-MM') === selectedMonth;
+      return formatInTimeZone(txDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
     });
 
     if (searchQuery) {
@@ -445,8 +446,8 @@ export function Dashboard() {
     return transactions.filter(tx => {
       const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
       const matchesPeriod = reportPeriod === 'month' 
-        ? format(txDate, 'yyyy-MM') === selectedMonth
-        : format(txDate, 'yyyy') === reportYear;
+        ? formatInTimeZone(txDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth
+        : formatInTimeZone(txDate, GUATEMALA_TZ, 'yyyy') === reportYear;
       
       const matchesType = tx.type === reportTransactionType;
       
@@ -541,10 +542,10 @@ export function Dashboard() {
 
     try {
       if (editingTransactionId) {
-        await setDoc(doc(db, 'transactions', editingTransactionId), txData, { merge: true });
+        await setDoc(doc(db, 'groups', profile.groupId, 'transactions', editingTransactionId), txData, { merge: true });
         toast.success('Transacción actualizada');
       } else {
-        await addDoc(collection(db, 'transactions'), txData);
+        await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), txData);
         toast.success('Transacción registrada');
       }
 
@@ -564,9 +565,9 @@ export function Dashboard() {
         };
         
         if (editingRecurringId) {
-          await setDoc(doc(db, 'recurring', editingRecurringId), recurringData, { merge: true });
+          await setDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', editingRecurringId), recurringData, { merge: true });
         } else {
-          await addDoc(collection(db, 'recurring'), recurringData);
+          await addDoc(collection(db, 'groups', profile.groupId, 'recurringExpenses'), recurringData);
         }
       }
 
@@ -580,7 +581,7 @@ export function Dashboard() {
       setEditingTransactionId(null);
       setEditingRecurringId(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'transactions');
+      handleFirestoreError(error, OperationType.WRITE, `groups/${profile.groupId}/transactions`);
     }
   };
 
@@ -592,10 +593,13 @@ export function Dashboard() {
       isDanger: true,
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, isRecurringTx ? 'recurring' : 'transactions', id));
+          const collectionName = isRecurringTx ? 'recurringExpenses' : 'transactions';
+          await deleteDoc(doc(db, 'groups', profile.groupId!, collectionName, id));
           toast.success('Eliminado correctamente');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, isRecurringTx ? `recurring/${id}` : `transactions/${id}`);
+          const collectionName = isRecurringTx ? 'recurringExpenses' : 'transactions';
+          handleFirestoreError(error, OperationType.DELETE, `groups/${profile.groupId}/${collectionName}/${id}`);
         }
       }
     });
@@ -639,10 +643,10 @@ export function Dashboard() {
 
     try {
       if (editingGoalId) {
-        await setDoc(doc(db, 'goals', editingGoalId), goalData, { merge: true });
+        await setDoc(doc(db, 'groups', profile.groupId, 'savingsGoals', editingGoalId), goalData, { merge: true });
         toast.success('Meta actualizada');
       } else {
-        await addDoc(collection(db, 'goals'), goalData);
+        await addDoc(collection(db, 'groups', profile.groupId, 'savingsGoals'), goalData);
         toast.success('Meta creada');
       }
       setIsGoalModalOpen(false);
@@ -652,7 +656,7 @@ export function Dashboard() {
       setGoalDeadline('');
       setEditingGoalId(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'goals');
+      handleFirestoreError(error, OperationType.WRITE, `groups/${profile.groupId}/savingsGoals`);
     }
   };
 
@@ -663,10 +667,10 @@ export function Dashboard() {
     const newAmount = goal.currentAmount + amount;
 
     try {
-      await setDoc(doc(db, 'goals', goalId), { currentAmount: newAmount }, { merge: true });
+      await setDoc(doc(db, 'groups', profile.groupId, 'savingsGoals', goalId), { currentAmount: newAmount }, { merge: true });
       
       if (record && profile?.groupId && user) {
-        await addDoc(collection(db, 'transactions'), {
+        await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), {
           groupId: profile.groupId,
           userId: user.uid,
           userName: user.displayName || user.email,
@@ -684,7 +688,7 @@ export function Dashboard() {
       setSelectedGoalForAmount(null);
       toast.success('Monto añadido a la meta');
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `goals/${goalId}`);
+      handleFirestoreError(error, OperationType.UPDATE, `groups/${profile.groupId}/savingsGoals/${goalId}`);
     }
   };
 
@@ -1194,7 +1198,7 @@ export function Dashboard() {
                             <p className="text-[10px] text-gray-500 dark:text-gray-400">
                               {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'dd MMM', { locale: es })} • {tx.userName}
                             </p>
-                            {(tx.tags || []).map(tag => (
+                            {Array.from(new Set(tx.tags || [])).map(tag => (
                               <span key={tag} className="text-[8px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
                             ))}
                           </div>
@@ -1277,22 +1281,22 @@ export function Dashboard() {
               recurringExpenses={recurringExpenses}
               getCategoryEmoji={getCategoryEmoji}
               handleProcessRecurringManually={async (re) => {
-                const currentMonth = format(new Date(), 'yyyy-MM');
+                const currentMonth = formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM');
                 if (re.lastProcessedMonth === currentMonth) {
                   toast.error('Este gasto ya fue procesado este mes');
                   return;
                 }
                 
                 try {
-                  const txId = doc(collection(db, 'transactions')).id;
+                  const txId = doc(collection(db, 'groups', profile?.groupId!, 'transactions')).id;
                   const txDate = new Date();
                   txDate.setDate(re.dayOfMonth);
                   
                   const newTx: Transaction = {
                     id: txId,
                     groupId: profile?.groupId || '',
-                    userId: 'system',
-                    userName: 'Sistema (Manual)',
+                    userId: user?.uid || '',
+                    userName: `Sistema (${user?.displayName || user?.email})`,
                     amount: re.amount,
                     type: re.type,
                     category: re.category,
@@ -1305,11 +1309,11 @@ export function Dashboard() {
                     createdAt: serverTimestamp(),
                   };
 
-                  await setDoc(doc(db, 'transactions', txId), newTx);
-                  await setDoc(doc(db, 'recurring', re.id), { lastProcessedMonth: currentMonth }, { merge: true });
+                  await setDoc(doc(db, 'groups', profile?.groupId!, 'transactions', txId), newTx);
+                  await setDoc(doc(db, 'groups', profile?.groupId!, 'recurringExpenses', re.id), { lastProcessedMonth: currentMonth }, { merge: true });
                   toast.success('Gasto procesado manualmente');
                 } catch (error) {
-                  handleFirestoreError(error, OperationType.WRITE, 'transactions');
+                  handleFirestoreError(error, OperationType.WRITE, `groups/${profile?.groupId}/transactions`);
                 }
               }}
               setEditingRecurringId={setEditingRecurringId}
@@ -1346,10 +1350,11 @@ export function Dashboard() {
                   isDanger: true,
                   onConfirm: async () => {
                     try {
-                      await deleteDoc(doc(db, 'goals', id));
+                      await deleteDoc(doc(db, 'groups', profile?.groupId!, 'savingsGoals', id));
                       toast.success('Meta eliminada');
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
                     } catch (error) {
-                      handleFirestoreError(error, OperationType.DELETE, `goals/${id}`);
+                      handleFirestoreError(error, OperationType.DELETE, `groups/${profile?.groupId}/savingsGoals/${id}`);
                     }
                   }
                 });
@@ -1378,6 +1383,7 @@ export function Dashboard() {
                       await setDoc(doc(db, 'groups', group.id), { members: newMembers }, { merge: true });
                       await setDoc(doc(db, 'users', memberId), { groupId: null }, { merge: true });
                       toast.success('Miembro eliminado');
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
                     } catch (error) {
                       handleFirestoreError(error, OperationType.UPDATE, `groups/${group.id}`);
                     }
@@ -1396,6 +1402,7 @@ export function Dashboard() {
                       // In a real app, we'd delete all sub-collections too
                       await deleteDoc(doc(db, 'groups', group.id));
                       toast.success('Grupo eliminado');
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
                       window.location.reload();
                     } catch (error) {
                       handleFirestoreError(error, OperationType.DELETE, `groups/${group.id}`);
@@ -1450,81 +1457,77 @@ export function Dashboard() {
           setIsRecurring(false);
           setIsAdding(true);
         }}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-14 h-14 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50"
       >
         <Plus size={32} />
       </button>
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-t border-[#E4E3E0] dark:border-gray-800 z-40 px-6 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={() => setActiveTab('dashboard')}
-              className={cn(
-                "flex flex-col items-center gap-1 transition-all",
-                activeTab === 'dashboard' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-              )}
-            >
-              <LayoutDashboard size={24} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Inicio</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('history')}
-              className={cn(
-                "flex flex-col items-center gap-1 transition-all",
-                activeTab === 'history' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-              )}
-            >
-              <History size={24} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Historial</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('recurring')}
-              className={cn(
-                "flex flex-col items-center gap-1 transition-all",
-                activeTab === 'recurring' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-              )}
-            >
-              <Repeat size={24} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Fijos</span>
-            </button>
-          </div>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-t border-[#E4E3E0] dark:border-gray-800 z-40 px-2 py-3">
+        <div className="max-w-lg mx-auto flex items-center justify-around gap-1">
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
+              activeTab === 'dashboard' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            )}
+          >
+            <LayoutDashboard size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Inicio</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('history')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
+              activeTab === 'history' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            )}
+          >
+            <History size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Historial</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('recurring')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
+              activeTab === 'recurring' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            )}
+          >
+            <Repeat size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Fijos</span>
+          </button>
 
-          <div className="w-12" /> {/* Spacer for FAB */}
+          <div className="w-14 flex-shrink-0" /> {/* Spacer for FAB */}
 
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={() => setActiveTab('goals')}
-              className={cn(
-                "flex flex-col items-center gap-1 transition-all",
-                activeTab === 'goals' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-              )}
-            >
-              <Target size={24} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Metas</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('reports')}
-              className={cn(
-                "flex flex-col items-center gap-1 transition-all",
-                activeTab === 'reports' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-              )}
-            >
-              <BarChart3 size={24} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Reportes</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('ai')}
-              className={cn(
-                "flex flex-col items-center gap-1 transition-all",
-                activeTab === 'ai' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-              )}
-            >
-              <Sparkles size={24} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">IA</span>
-            </button>
-          </div>
+          <button 
+            onClick={() => setActiveTab('goals')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
+              activeTab === 'goals' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            )}
+          >
+            <Target size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Metas</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('reports')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
+              activeTab === 'reports' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            )}
+          >
+            <BarChart3 size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">Reportes</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('ai')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
+              activeTab === 'ai' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            )}
+          >
+            <Sparkles size={22} />
+            <span className="text-[9px] font-bold uppercase tracking-tighter">IA</span>
+          </button>
         </div>
       </nav>
 
@@ -1539,6 +1542,7 @@ export function Dashboard() {
         editingTransactionId={editingTransactionId}
         editingRecurringId={editingRecurringId}
         isRecurring={isRecurring}
+        setIsRecurring={setIsRecurring}
         type={type}
         setType={setType}
         amount={amount}

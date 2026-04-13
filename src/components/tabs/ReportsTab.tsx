@@ -2,6 +2,7 @@ import { X, ChevronDown } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { formatInTimeZone } from 'date-fns-tz';
 import { 
   PieChart as RePieChart, 
   Pie, 
@@ -12,6 +13,8 @@ import {
 } from 'recharts';
 import { Transaction } from '../../types';
 import { formatCurrency, cn } from '../../lib/utils';
+
+const GUATEMALA_TZ = 'America/Guatemala';
 
 interface ReportsTabProps {
   reportPeriod: 'month' | 'year';
@@ -240,7 +243,7 @@ export function ReportsTab({
                           key={suggestion}
                           type="button"
                           onClick={() => {
-                            setReportUnitFilter(prev => [...prev, suggestion]);
+                            setReportUnitFilter(prev => prev.includes(suggestion) ? prev : [...prev, suggestion]);
                             setUnitSearchInput('');
                           }}
                           className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
@@ -352,10 +355,10 @@ export function ReportsTab({
                       <p className="font-bold text-sm dark:text-white">{tx.description || tx.category}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-[10px] text-gray-400">
-                          {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'dd MMM yyyy', { locale: es })}
+                          {formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'dd MMM yyyy', { locale: es })}
                         </p>
                         <div className="flex gap-1">
-                          {(tx.tags || []).map(tag => (
+                          {Array.from(new Set(tx.tags || [])).map(tag => (
                             <span key={tag} className="text-[8px] font-bold text-[#5A5A40] dark:text-[#8B8B6B]">#{tag}</span>
                           ))}
                         </div>

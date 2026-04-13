@@ -1,4 +1,5 @@
-import { X, Banknote, CreditCard, ArrowUpRight, PlusCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Banknote, CreditCard, ArrowUpRight, PlusCircle, Repeat } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CATEGORIES, PAYMENT_METHODS } from '../../types';
 import { cn } from '../../lib/utils';
@@ -9,6 +10,7 @@ interface TransactionModalProps {
   editingTransactionId: string | null;
   editingRecurringId: string | null;
   isRecurring: boolean;
+  setIsRecurring: (val: boolean) => void;
   type: 'expense' | 'income';
   setType: (type: 'expense' | 'income') => void;
   amount: string;
@@ -41,6 +43,7 @@ export function TransactionModal({
   editingTransactionId,
   editingRecurringId,
   isRecurring,
+  setIsRecurring,
   type,
   setType,
   amount,
@@ -66,6 +69,8 @@ export function TransactionModal({
   getCategoryEmoji,
   group
 }: TransactionModalProps) {
+  const [isTagInputFocused, setIsTagInputFocused] = useState(false);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -121,6 +126,36 @@ export function TransactionModal({
                 </button>
               </div>
 
+              {!editingTransactionId && !editingRecurringId && (
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+                      isRecurring ? "bg-[#5A5A40] text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-400"
+                    )}>
+                      <Repeat size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold dark:text-white">Gasto Fijo</p>
+                      <p className="text-[10px] text-gray-500">Se repetirá mensualmente</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecurring(!isRecurring)}
+                    className={cn(
+                      "w-12 h-6 rounded-full relative transition-colors duration-200",
+                      isRecurring ? "bg-[#5A5A40]" : "bg-gray-200 dark:bg-gray-700"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200",
+                      isRecurring ? "left-7" : "left-1"
+                    )} />
+                  </button>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Monto</label>
                 <div className="relative">
@@ -147,51 +182,44 @@ export function TransactionModal({
                     className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
                   >
                     <option value="" className="dark:bg-gray-900">Seleccionar</option>
-                    {(type === 'expense' ? [...CATEGORIES.expense, ...(group?.customCategories || [])] : CATEGORIES.income).map(cat => (
+                    {Array.from(new Set(type === 'expense' ? [...CATEGORIES.expense, ...(group?.customCategories || [])] : CATEGORIES.income)).map(cat => (
                       <option key={cat} value={cat} className="dark:bg-gray-900">
                         {getCategoryEmoji(cat)} {cat}
                       </option>
                     ))}
                   </select>
                 </div>
-                {type === 'expense' && !(isRecurring || editingRecurringId) ? (
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Fecha</label>
-                    <input 
-                      type="date" 
-                      required
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
-                    />
-                  </div>
-                ) : (isRecurring || editingRecurringId) ? (
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Día del Mes</label>
-                    <select 
-                      required
-                      value={dayOfMonth}
-                      onChange={(e) => setDayOfMonth(e.target.value)}
-                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                        <option key={day} value={day} className="dark:bg-gray-900">{day}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Fecha</label>
-                    <input 
-                      type="date" 
-                      required
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
-                    />
-                  </div>
-                )}
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                    {isRecurring || editingRecurringId ? 'Primer Cobro' : 'Fecha'}
+                  </label>
+                  <input 
+                    type="date" 
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                  />
+                </div>
               </div>
+
+              {(isRecurring || editingRecurringId) && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Día de Cobro Mensual</label>
+                  <select 
+                    required
+                    value={dayOfMonth}
+                    onChange={(e) => setDayOfMonth(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day} className="dark:bg-gray-900">{day}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-400 px-2">Día en que se generará automáticamente el gasto cada mes.</p>
+                </div>
+              )}
 
               {(isRecurring || editingRecurringId) && (
                 <div className="space-y-2">
@@ -252,6 +280,11 @@ export function TransactionModal({
                       type="text" 
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
+                      onFocus={() => setIsTagInputFocused(true)}
+                      onBlur={() => {
+                        // Small delay to allow clicking suggestions
+                        setTimeout(() => setIsTagInputFocused(false), 200);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -279,8 +312,8 @@ export function TransactionModal({
                   </div>
 
                   {/* Tag Suggestions */}
-                  {tagSuggestions.length > 0 && (
-                    <div className="absolute z-50 bottom-full mb-2 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+                  {tagSuggestions.length > 0 && (isTagInputFocused || tagInput.length > 0) && (
+                    <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
                       <div className="p-2 border-b border-gray-100 dark:border-gray-800">
                         <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Sugerencias</p>
                       </div>
