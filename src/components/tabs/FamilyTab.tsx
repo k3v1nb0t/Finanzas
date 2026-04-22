@@ -37,21 +37,21 @@ export function FamilyTab({
       exit={{ opacity: 0, x: -20 }}
       className="space-y-8"
     >
-      <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold dark:text-white">{group?.name}</h2>
-            <p className="text-gray-500 dark:text-gray-400">Gestiona los miembros de tu familia o grupo.</p>
+      <div className="bg-white dark:bg-gray-900 p-4 sm:p-8 rounded-3xl shadow-sm border border-border dark:border-border-dark">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold dark:text-text-dark truncate">{group?.name}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona los miembros de tu familia o grupo.</p>
           </div>
-          <div className="bg-[#5A5A40]/10 dark:bg-[#8B8B6B]/10 text-[#5A5A40] dark:text-[#8B8B6B] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+          <div className="bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
             {group?.ownerId === user?.uid ? 'Propietario' : 'Miembro'}
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
-          <div className="w-full sm:w-auto flex items-center gap-3 p-4 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl border border-[#E4E3E0] dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div className="w-full sm:w-auto flex items-center gap-3 p-4 bg-bg dark:bg-gray-800 rounded-2xl border border-border dark:border-border-dark">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] dark:text-[#8B8B6B]">Código de Invitación</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary dark:text-primary-light">Código de Invitación</p>
               <p className="text-xl font-mono font-bold dark:text-white">{group?.inviteCode}</p>
             </div>
             <button 
@@ -61,7 +61,7 @@ export function FamilyTab({
                 navigator.clipboard.writeText(message);
                 toast.success('Invitación copiada');
               }}
-              className="ml-auto p-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
+              className="ml-auto p-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-border dark:border-border-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors dark:text-white"
             >
               <Share2 size={18} />
             </button>
@@ -73,7 +73,7 @@ export function FamilyTab({
                 setGroupAction('create');
                 setIsGroupModalOpen(true);
               }}
-              className="flex-1 sm:flex-none bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-[#4A4A30] dark:hover:bg-[#7A7A5B] transition-colors"
+              className="flex-1 sm:flex-none bg-primary dark:bg-primary-light text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-primary-hover dark:hover:bg-primary-light-hover transition-colors"
             >
               Nuevo Grupo
             </button>
@@ -82,7 +82,7 @@ export function FamilyTab({
                 setGroupAction('join');
                 setIsGroupModalOpen(true);
               }}
-              className="flex-1 sm:flex-none bg-white dark:bg-gray-900 text-[#5A5A40] dark:text-[#8B8B6B] border border-[#E4E3E0] dark:border-gray-800 px-4 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              className="flex-1 sm:flex-none bg-white dark:bg-gray-900 text-primary dark:text-primary-light border border-border dark:border-border-dark px-4 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               Unirse a Grupo
             </button>
@@ -144,17 +144,17 @@ export function FamilyTab({
       </div>
 
       {groups.length > 1 && (
-        <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
-          <h3 className="text-lg font-bold mb-4 dark:text-white">Mis Otros Presupuestos</h3>
+        <div className="bg-white dark:bg-gray-900 p-4 sm:p-8 rounded-3xl shadow-sm border border-border dark:border-border-dark">
+          <h3 className="text-base sm:text-lg font-bold mb-4 dark:text-white">Mis Otros Presupuestos</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {groups.filter(g => g.id !== profile?.groupId).map(g => (
               <button
                 key={g.id}
                 onClick={() => switchGroup(g.id)}
-                className="flex items-center justify-between p-4 rounded-2xl border border-[#E4E3E0] dark:border-gray-800 hover:border-[#5A5A40] dark:hover:border-[#8B8B6B] hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-left"
+                className="flex items-center justify-between p-4 rounded-2xl border border-border dark:border-border-dark hover:border-primary dark:hover:border-primary-light hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-left"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-[#5A5A40] dark:text-[#8B8B6B]">
+                  <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-primary dark:text-primary-light">
                     <Users size={20} />
                   </div>
                   <div>

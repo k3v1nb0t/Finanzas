@@ -55,13 +55,13 @@ export function BudgetModal({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-[40px] sm:rounded-[40px] shadow-2xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden"
+            className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-[40px] sm:rounded-[40px] shadow-2xl border border-border dark:border-border-dark overflow-hidden"
           >
-            <div className="p-8 max-h-[85vh] overflow-y-auto pb-12">
+            <div className="p-6 sm:p-8 max-h-[85vh] overflow-y-auto pb-12">
               <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-6 sm:hidden" />
               <div className="flex justify-between items-center mb-8">
                 <div>
-                  <h2 className="text-2xl font-black tracking-tight dark:text-white">Presupuesto</h2>
+                  <h2 className="text-2xl font-black tracking-tight dark:text-text-dark">Presupuesto</h2>
                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Configuración mensual</p>
                 </div>
                 <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-full text-gray-400 hover:text-gray-600">
@@ -80,7 +80,7 @@ export function BudgetModal({
                       value={budgetInput}
                       onChange={(e) => setBudgetInput(e.target.value)}
                       placeholder="0.00"
-                      className="w-full pl-8 pr-4 py-4 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl border-none focus:ring-2 focus:ring-[#5A5A40] font-bold text-lg dark:text-white"
+                      className="w-full pl-8 pr-4 py-4 bg-bg dark:bg-gray-800 rounded-2xl border-none focus:ring-2 focus:ring-primary font-bold text-lg dark:text-white"
                     />
                   </div>
                   {(() => {
@@ -89,7 +89,7 @@ export function BudgetModal({
                     return total > 0 && (
                       <p className={cn(
                         "mt-2 text-[10px] font-bold uppercase tracking-wider",
-                        total > global ? "text-red-500" : "text-green-600"
+                        total > global ? "text-red-500" : "text-income"
                       )}>
                         Total asignado: {formatCurrency(total)} / {formatCurrency(global)}
                         {total > global && " (Excede el global)"}
@@ -106,7 +106,7 @@ export function BudgetModal({
                       value={newCategoryInput}
                       onChange={(e) => setNewCategoryInput(e.target.value)}
                       placeholder="Nueva categoría..."
-                      className="flex-1 bg-[#F5F5F0] dark:bg-gray-800 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                      className="flex-1 bg-bg dark:bg-gray-800 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-primary dark:text-white"
                     />
                     <button 
                       type="button"
@@ -119,7 +119,7 @@ export function BudgetModal({
                           toast.error('Esta categoría ya existe');
                         }
                       }}
-                      className="bg-[#5A5A40] text-white px-4 py-2 rounded-xl text-sm font-bold"
+                      className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold"
                     >
                       Agregar
                     </button>
@@ -160,7 +160,7 @@ export function BudgetModal({
                             value={categoryEmojisInput[cat] || ''}
                             onChange={(e) => setCategoryEmojisInput(prev => ({ ...prev, [cat]: e.target.value }))}
                             placeholder="Emoji"
-                            className="w-10 h-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border-none focus:ring-2 focus:ring-[#5A5A40] text-sm"
+                            className="w-10 h-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border-none focus:ring-2 focus:ring-primary text-sm"
                           />
                         </div>
                         <div className="relative">
@@ -170,7 +170,7 @@ export function BudgetModal({
                             value={categoryBudgetsInput[cat] || ''}
                             onChange={(e) => setCategoryBudgetsInput(prev => ({ ...prev, [cat]: e.target.value }))}
                             placeholder="0.00"
-                            className="w-full pl-6 pr-3 py-2 bg-[#F5F5F0] dark:bg-gray-800 rounded-xl border-none focus:ring-2 focus:ring-[#5A5A40] text-sm font-bold dark:text-white"
+                            className="w-full pl-6 pr-3 py-2 bg-bg dark:bg-gray-800 rounded-xl border-none focus:ring-2 focus:ring-primary text-sm font-bold dark:text-white"
                           />
                         </div>
                       </div>
@@ -178,7 +178,7 @@ export function BudgetModal({
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-6 border-t border-[#F0EFEA] dark:border-gray-800">
+                <div className="space-y-4 pt-6 border-t border-inner-border dark:border-border-dark">
                   <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Importar/Exportar</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
@@ -197,7 +197,7 @@ export function BudgetModal({
 
                 <button 
                   type="submit"
-                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors"
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-primary-hover transition-colors"
                 >
                   Guardar Presupuestos
                 </button>

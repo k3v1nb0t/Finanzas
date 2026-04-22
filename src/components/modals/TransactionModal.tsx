@@ -74,22 +74,22 @@ export function TransactionModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
-          <motion.div 
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
           />
-          <motion.div 
+          <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold dark:text-white">
+              <h2 className="text-xl sm:text-2xl font-bold dark:text-text-dark">
                 {editingRecurringId ? 'Editar Fijo' : editingTransactionId ? 'Editar Transacción' : isRecurring ? 'Nuevo Fijo' : 'Nueva Transacción'}
               </h2>
               <button 
@@ -109,7 +109,7 @@ export function TransactionModal({
                   onClick={() => setType('expense')}
                   className={cn(
                     "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
-                    type === 'expense' ? "bg-white dark:bg-gray-700 shadow-sm text-red-600 dark:text-red-400" : "text-gray-500"
+                    type === 'expense' ? "bg-white dark:bg-gray-700 shadow-sm text-expense dark:text-expense-dark" : "text-gray-500"
                   )}
                 >
                   Gasto
@@ -119,7 +119,7 @@ export function TransactionModal({
                   onClick={() => setType('income')}
                   className={cn(
                     "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
-                    type === 'income' ? "bg-white dark:bg-gray-700 shadow-sm text-green-600 dark:text-green-400" : "text-gray-500"
+                    type === 'income' ? "bg-white dark:bg-gray-700 shadow-sm text-income dark:text-income-dark" : "text-gray-500"
                   )}
                 >
                   Ingreso
@@ -131,12 +131,12 @@ export function TransactionModal({
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
-                      isRecurring ? "bg-[#5A5A40] text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-400"
+                      isRecurring ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-400"
                     )}>
                       <Repeat size={20} />
                     </div>
                     <div>
-                      <p className="text-sm font-bold dark:text-white">Gasto Fijo</p>
+                      <p className="text-sm font-bold dark:text-text-dark">Gasto Fijo</p>
                       <p className="text-[10px] text-gray-500">Se repetirá mensualmente</p>
                     </div>
                   </div>
@@ -145,7 +145,7 @@ export function TransactionModal({
                     onClick={() => setIsRecurring(!isRecurring)}
                     className={cn(
                       "w-12 h-6 rounded-full relative transition-colors duration-200",
-                      isRecurring ? "bg-[#5A5A40]" : "bg-gray-200 dark:bg-gray-700"
+                      isRecurring ? "bg-primary" : "bg-gray-200 dark:bg-gray-700"
                     )}
                   >
                     <div className={cn(
@@ -166,7 +166,7 @@ export function TransactionModal({
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold focus:ring-2 focus:ring-[#5A5A40] placeholder:text-gray-400 dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold focus:ring-2 focus:ring-primary placeholder:text-gray-400 dark:text-white"
                     placeholder="0.00"
                   />
                 </div>
@@ -179,7 +179,7 @@ export function TransactionModal({
                     required
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-primary dark:text-white"
                   >
                     <option value="" className="dark:bg-gray-900">Seleccionar</option>
                     {Array.from(new Set(type === 'expense' ? [...CATEGORIES.expense, ...(group?.customCategories || [])] : CATEGORIES.income)).map(cat => (
@@ -199,7 +199,7 @@ export function TransactionModal({
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-primary dark:text-white"
                   />
                 </div>
               </div>
@@ -211,7 +211,7 @@ export function TransactionModal({
                     required
                     value={dayOfMonth}
                     onChange={(e) => setDayOfMonth(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-primary dark:text-white"
                   >
                     {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
                       <option key={day} value={day} className="dark:bg-gray-900">{day}</option>
@@ -228,7 +228,7 @@ export function TransactionModal({
                     type="date" 
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-primary dark:text-white"
                   />
                   <p className="text-[10px] text-gray-400 px-2">El fijo se marcará como FINALIZADO después de esta fecha.</p>
                 </div>
@@ -246,8 +246,8 @@ export function TransactionModal({
                         className={cn(
                           "flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border transition-all",
                           paymentMethod === method 
-                            ? "bg-[#5A5A40] dark:bg-[#8B8B6B] text-white border-[#5A5A40] dark:border-[#8B8B6B] shadow-md" 
-                            : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:border-[#5A5A40] dark:hover:border-[#8B8B6B]"
+                            ? "bg-primary dark:bg-primary-light text-white border-primary dark:border-primary-light shadow-md" 
+                            : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:border-primary dark:hover:border-primary-light"
                         )}
                       >
                         {method === 'Efectivo' && <Banknote size={16} />}
@@ -267,7 +267,7 @@ export function TransactionModal({
                   type="text" 
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-primary dark:text-white"
                   placeholder={isRecurring ? "Ej. Pago de Hipoteca" : "Ej. Almuerzo en el trabajo"}
                 />
               </div>
@@ -294,7 +294,7 @@ export function TransactionModal({
                           }
                         }
                       }}
-                      className="flex-1 bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                      className="flex-1 bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary dark:text-white"
                       placeholder="Ej. #restaurante, #dominguito"
                     />
                     <button 
@@ -305,7 +305,7 @@ export function TransactionModal({
                           setTagInput('');
                         }
                       }}
-                      className="bg-[#5A5A40] text-white px-4 rounded-xl text-xs font-bold"
+                      className="bg-primary text-white px-4 rounded-xl text-xs font-bold"
                     >
                       Añadir
                     </button>
@@ -313,7 +313,7 @@ export function TransactionModal({
 
                   {/* Tag Suggestions */}
                   {tagSuggestions.length > 0 && (isTagInputFocused || tagInput.length > 0) && (
-                    <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
+                    <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-border dark:border-border-dark overflow-hidden">
                       <div className="p-2 border-b border-gray-100 dark:border-gray-800">
                         <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Sugerencias</p>
                       </div>
@@ -352,7 +352,7 @@ export function TransactionModal({
 
               <button 
                 type="submit"
-                className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-[#4A4A30] transition-colors"
+                className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-primary-hover transition-colors"
               >
                 {editingRecurringId ? 'Actualizar Fijo' : editingTransactionId ? 'Actualizar Transacción' : isRecurring ? 'Configurar Fijo' : 'Guardar Transacción'}
               </button>

@@ -26,16 +26,17 @@ export function AddAmountModal({
   return (
     <AnimatePresence>
       {isOpen && selectedGoal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-[40px] sm:rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
           >
-            <div className="p-8">
+            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mt-4 mb-2 sm:hidden" />
+            <div className="p-6 sm:p-8">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold dark:text-white">Agregar Ahorro</h3>
+                <h3 className="text-xl font-bold dark:text-text-dark">Agregar Ahorro</h3>
                 <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                   <X size={24} />
                 </button>
@@ -52,7 +53,7 @@ export function AddAmountModal({
                       value={amountToAddInput}
                       onChange={(e) => setAmountToAddInput(e.target.value)}
                       placeholder="0.00"
-                      className="w-full pl-10 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl text-xl font-black focus:ring-2 focus:ring-[#5A5A40] outline-none transition-all dark:text-white"
+                      className="w-full pl-10 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl text-xl font-black focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
                       autoFocus
                     />
                   </div>
@@ -65,13 +66,13 @@ export function AddAmountModal({
                         <History size={18} />
                       </div>
                       <div>
-                        <p className="text-xs font-bold dark:text-white">¿Registrar en historial?</p>
+                        <p className="text-xs font-bold dark:text-text-dark">¿Registrar en historial?</p>
                         <p className="text-[10px] text-gray-500">Afectará tu presupuesto mensual disponible.</p>
                       </div>
                     </div>
                     <button 
                       onClick={() => setShouldRecordAsTransaction(!shouldRecordAsTransaction)}
-                      className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${shouldRecordAsTransaction ? 'bg-[#5A5A40]' : 'bg-gray-300 dark:bg-gray-700'}`}
+                      className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${shouldRecordAsTransaction ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'}`}
                     >
                       <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${shouldRecordAsTransaction ? 'translate-x-6' : 'translate-x-0'}`} />
                     </button>
@@ -88,7 +89,7 @@ export function AddAmountModal({
                   <button 
                     onClick={() => handleAddToGoal(selectedGoal.id, parseFloat(amountToAddInput), shouldRecordAsTransaction)}
                     disabled={!amountToAddInput || parseFloat(amountToAddInput) <= 0}
-                    className="flex-1 py-4 bg-[#5A5A40] text-white rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors disabled:opacity-50"
+                    className="flex-1 py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20 hover:bg-primary-hover transition-colors disabled:opacity-50"
                   >
                     Sí, Agregar
                   </button>

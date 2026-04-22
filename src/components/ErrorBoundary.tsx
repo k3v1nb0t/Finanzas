@@ -40,16 +40,16 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4 text-center">
-          <div className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-xl border border-[#E4E3E0]">
-            <div className="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center text-red-600 mx-auto mb-8">
+        <div className="min-h-screen bg-bg flex flex-col items-center justify-center p-4 text-center">
+          <div className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-xl border border-border">
+            <div className="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center text-expense mx-auto mb-8">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             </div>
             <h1 className="text-2xl font-bold mb-4">¡Ups! Algo salió mal</h1>
             <p className="text-gray-500 mb-8">{errorMessage}</p>
             <button 
               onClick={() => window.location.reload()}
-              className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors"
+              className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-primary-hover transition-colors"
             >
               Recargar aplicación
             </button>

@@ -33,16 +33,17 @@ export function GoalModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-[40px] sm:rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
           >
-            <div className="p-8">
+            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mt-4 mb-2 sm:hidden" />
+            <div className="p-6 sm:p-8">
               <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-black tracking-tight dark:text-white">
+                <h2 className="text-2xl font-black tracking-tight dark:text-text-dark">
                   {editingGoalId ? 'Editar Meta' : 'Nueva Meta de Ahorro'}
                 </h2>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors dark:text-gray-400">
@@ -58,7 +59,7 @@ export function GoalModal({
                     required
                     value={goalName}
                     onChange={(e) => setGoalName(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-primary dark:text-white"
                     placeholder="Ej. Viaje a la playa"
                   />
                 </div>
@@ -73,7 +74,7 @@ export function GoalModal({
                         required
                         value={goalTarget}
                         onChange={(e) => setGoalTarget(e.target.value)}
-                        className="w-full pl-8 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-2 focus:ring-[#5A5A40] font-bold dark:text-white"
+                        className="w-full pl-8 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-2 focus:ring-primary font-bold dark:text-white"
                         placeholder="0.00"
                       />
                     </div>
@@ -87,7 +88,7 @@ export function GoalModal({
                         required
                         value={goalCurrent}
                         onChange={(e) => setGoalCurrent(e.target.value)}
-                        className="w-full pl-8 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-2 focus:ring-[#5A5A40] font-bold dark:text-white"
+                        className="w-full pl-8 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-2 focus:ring-primary font-bold dark:text-white"
                         placeholder="0.00"
                       />
                     </div>
@@ -100,13 +101,13 @@ export function GoalModal({
                     type="date" 
                     value={goalDeadline}
                     onChange={(e) => setGoalDeadline(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-primary dark:text-white"
                   />
                 </div>
 
                 <button 
                   type="submit"
-                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-[#4A4A30] transition-colors"
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:bg-primary-hover transition-colors"
                 >
                   {editingGoalId ? 'Actualizar Meta' : 'Crear Meta'}
                 </button>

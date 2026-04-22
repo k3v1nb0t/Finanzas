@@ -67,7 +67,7 @@ export function HistoryTab({
     >
       <div className="flex flex-col gap-6 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold dark:text-white">Historial del Mes</h2>
+          <h2 className="text-2xl font-bold dark:text-text-dark">Historial del Mes</h2>
           <div className="flex items-center gap-2">
             <div className="relative flex-1 sm:w-64">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -76,12 +76,12 @@ export function HistoryTab({
                 placeholder="Buscar descripción o etiqueta..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-[#5A5A40] outline-none transition-all dark:text-white"
+                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-900 border border-border dark:border-border-dark rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
               />
             </div>
             <button 
               onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-[#E4E3E0] dark:border-gray-800 rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-border dark:border-border-dark rounded-xl text-xs font-bold text-primary dark:text-primary-light hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               <ArrowDownRight size={14} />
               Exportar CSV
@@ -110,7 +110,7 @@ export function HistoryTab({
                   onClick={() => setSelectedTagFilter(null)}
                   className={cn(
                     "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
-                    !selectedTagFilter ? "bg-[#5A5A40] text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                    !selectedTagFilter ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500"
                   )}
                 >
                   Todas
@@ -121,7 +121,7 @@ export function HistoryTab({
                     onClick={() => setSelectedTagFilter(selectedTagFilter === tag ? null : tag)}
                     className={cn(
                       "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
-                      selectedTagFilter === tag ? "bg-[#5A5A40] text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500"
+                      selectedTagFilter === tag ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500"
                     )}
                   >
                     #{tag}
@@ -134,9 +134,9 @@ export function HistoryTab({
                 {Object.entries(spendingByTag)
                   .sort((a, b) => b[1] - a[1])
                   .map(([tag, amount]) => (
-                    <div key={tag} className="flex-shrink-0 bg-white dark:bg-gray-900 px-4 py-3 rounded-2xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+                    <div key={tag} className="flex-shrink-0 bg-white dark:bg-gray-900 px-4 py-3 rounded-2xl border border-border dark:border-border-dark shadow-sm">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">#{tag}</p>
-                      <p className="text-sm font-black text-[#5A5A40] dark:text-[#8B8B6B]">{formatCurrency(amount)}</p>
+                      <p className="text-sm font-black text-primary dark:text-primary-light">{formatCurrency(amount)}</p>
                     </div>
                   ))}
               </div>
@@ -144,8 +144,8 @@ export function HistoryTab({
           );
         })()}
       </div>
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
-        <div className="divide-y divide-[#E4E3E0] dark:divide-gray-800">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-border dark:border-border-dark overflow-hidden">
+        <div className="divide-y divide-inner-border dark:divide-border-dark">
           {filteredTransactions.map((tx) => (
             <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 group gap-2 sm:gap-3">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -162,7 +162,7 @@ export function HistoryTab({
                       {getCategoryEmoji(tx.category)} {tx.category}
                     </span>
                     {tx.isRecurring && (
-                      <span className="bg-[#5A5A40]/10 text-[#5A5A40] text-[7px] sm:text-[8px] font-black uppercase px-1 py-0.5 rounded tracking-tighter flex-shrink-0 flex items-center gap-0.5">
+                      <span className="bg-primary/10 text-primary text-[7px] sm:text-[8px] font-black uppercase px-1 py-0.5 rounded tracking-tighter flex-shrink-0 flex items-center gap-0.5">
                         <Repeat size={7} className="sm:w-2 sm:h-2" /> Fijo
                       </span>
                     )}
@@ -175,7 +175,7 @@ export function HistoryTab({
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {Array.from(new Set(tx.tags || [])).map(tag => (
-                        <span key={tag} className="text-[8px] sm:text-[9px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
+                        <span key={tag} className="text-[8px] sm:text-[9px] text-primary dark:text-primary-light font-bold">#{tag}</span>
                       ))}
                     </div>
                   </div>
@@ -184,7 +184,7 @@ export function HistoryTab({
               <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3 flex-shrink-0 text-right">
                 <p className={cn(
                   "font-bold text-sm sm:text-base whitespace-nowrap",
-                  tx.type === 'income' ? "text-green-600" : "text-red-600"
+                  tx.type === 'income' ? "text-income" : "text-expense"
                 )}>
                   {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                 </p>
@@ -203,7 +203,7 @@ export function HistoryTab({
                         setIsAdding(true);
                         setIsRecurring(false);
                       }}
-                      className="p-1.5 sm:p-2 text-gray-300 hover:text-[#5A5A40]"
+                      className="p-1.5 sm:p-2 text-gray-300 hover:text-primary"
                     >
                       <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" />
                     </button>

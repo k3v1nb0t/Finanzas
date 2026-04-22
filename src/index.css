@@ -3,7 +3,30 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #059669;
+  --color-primary-hover: #047857;
+  --color-primary-light: #34D399;
+  --color-primary-light-hover: #10B981;
+  --color-primary-subtle: #ECFDF5;
+  --color-primary-subtle-dark: #064E3B;
+  --color-bg: #FAFAF8;
+  --color-bg-dark: #0A0A0A;
+  --color-surface: #FFFFFF;
+  --color-surface-dark: #161616;
+  --color-border: #E8E8E3;
+  --color-border-dark: #262626;
+  --color-inner-border: #F0EFEA;
+  --color-inner-border-dark: #1F1F1F;
+  --color-text: #1A1A1A;
+  --color-text-dark: #F5F5F5;
+  --color-text-muted: #6B7280;
+  --color-text-muted-dark: #9CA3AF;
+  --color-income: #059669;
+  --color-income-dark: #34D399;
+  --color-expense: #E11D48;
+  --color-expense-dark: #FB7185;
 }
 
 @layer base {
@@ -12,5 +35,41 @@
   }
   .dark {
     color-scheme: dark;
+  }
+
+  /* Fase 3: Micro-interacciones globales */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth transitions for interactive elements */
+  button, a, input, select, textarea {
+    transition: all 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* Active/pressed state for buttons */
+  button:active:not(:disabled) {
+    transform: scale(0.98) translateY(0.5px);
+  }
+
+  /* Focus rings */
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Smooth scroll */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Tabular nums for data */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Text balance */
+  h1, h2, h3 {
+    text-wrap: balance;
   }
 }

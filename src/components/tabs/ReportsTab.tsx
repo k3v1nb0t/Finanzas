@@ -76,7 +76,7 @@ export function ReportsTab({
       <div className="flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold dark:text-white">Reportes</h2>
+            <h2 className="text-2xl font-bold dark:text-text-dark">Reportes</h2>
             <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Análisis detallado de tus finanzas</p>
           </div>
           
@@ -85,7 +85,7 @@ export function ReportsTab({
               onClick={() => setReportPeriod('month')}
               className={cn(
                 "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
-                reportPeriod === 'month' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                reportPeriod === 'month' ? "bg-white dark:bg-gray-700 shadow-sm text-primary dark:text-primary-light" : "text-gray-500"
               )}
             >
               Mensual
@@ -94,7 +94,7 @@ export function ReportsTab({
               onClick={() => setReportPeriod('year')}
               className={cn(
                 "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
-                reportPeriod === 'year' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                reportPeriod === 'year' ? "bg-white dark:bg-gray-700 shadow-sm text-primary dark:text-primary-light" : "text-gray-500"
               )}
             >
               Anual
@@ -103,13 +103,13 @@ export function ReportsTab({
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl border border-border dark:border-border-dark shadow-sm">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Tipo de Reporte</label>
             <select 
               value={reportType}
               onChange={(e) => setReportType(e.target.value as any)}
-              className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+              className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-primary dark:text-white"
             >
               <option value="category">Por Categoría</option>
               <option value="tag">Por Etiqueta</option>
@@ -122,7 +122,7 @@ export function ReportsTab({
             <select 
               value={reportTransactionType}
               onChange={(e) => setReportTransactionType(e.target.value as any)}
-              className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+              className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-primary dark:text-white"
             >
               <option value="expense">Gastos</option>
               <option value="income">Ingresos</option>
@@ -136,7 +136,7 @@ export function ReportsTab({
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-primary dark:text-white"
               />
             </div>
           ) : (
@@ -145,7 +145,7 @@ export function ReportsTab({
               <select 
                 value={reportYear}
                 onChange={(e) => setReportYear(e.target.value)}
-                className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-primary dark:text-white"
               >
                 {Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString()).map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -161,7 +161,7 @@ export function ReportsTab({
                 onClick={() => setReportDisplay('grouped')}
                 className={cn(
                   "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
-                  reportDisplay === 'grouped' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                  reportDisplay === 'grouped' ? "bg-white dark:bg-gray-700 shadow-sm text-primary dark:text-primary-light" : "text-gray-500"
                 )}
               >
                 Agrupado
@@ -170,7 +170,7 @@ export function ReportsTab({
                 onClick={() => setReportDisplay('detailed')}
                 className={cn(
                   "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
-                  reportDisplay === 'detailed' ? "bg-white dark:bg-gray-700 shadow-sm text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-500"
+                  reportDisplay === 'detailed' ? "bg-white dark:bg-gray-700 shadow-sm text-primary dark:text-primary-light" : "text-gray-500"
                 )}
               >
                 Detallado
@@ -188,7 +188,7 @@ export function ReportsTab({
                   <button 
                     key={unit} 
                     onClick={() => setReportUnitFilter(prev => prev.filter(u => u !== unit))}
-                    className="bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors group"
+                    className="bg-primary/10 text-primary dark:text-primary-light px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors group"
                   >
                     {reportType === 'tag' ? `#${unit}` : unit}
                     <X size={10} className="group-hover:scale-110 transition-transform" />
@@ -209,12 +209,12 @@ export function ReportsTab({
                     }}
                     onFocus={() => setIsUnitDropdownOpen(true)}
                     placeholder={`Buscar ${reportType === 'category' ? 'categoría' : reportType === 'tag' ? 'etiqueta' : 'pago'}...`}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 pl-3 pr-10 text-sm focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl py-2 pl-3 pr-10 text-sm focus:ring-2 focus:ring-primary dark:text-white"
                   />
                   <button 
                     type="button"
                     onClick={() => setIsUnitDropdownOpen(!isUnitDropdownOpen)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#5A5A40] transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
                   >
                     <ChevronDown size={16} className={cn("transition-transform", isUnitDropdownOpen && "rotate-180")} />
                   </button>
@@ -236,7 +236,7 @@ export function ReportsTab({
                     className="fixed inset-0 z-40" 
                     onClick={() => setIsUnitDropdownOpen(false)}
                   />
-                  <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden max-h-60 overflow-y-auto scrollbar-hide">
+                  <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-border dark:border-border-dark overflow-hidden max-h-60 overflow-y-auto scrollbar-hide">
                     {unitSuggestions.length > 0 ? (
                       unitSuggestions.map(suggestion => (
                         <button
@@ -265,23 +265,23 @@ export function ReportsTab({
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl border border-border dark:border-border-dark shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total {reportTransactionType === 'expense' ? 'Gastado' : 'Ingresado'}</p>
             <p className={cn(
               "text-2xl font-black",
-              reportTransactionType === 'expense' ? "text-red-600" : "text-green-600"
+              reportTransactionType === 'expense' ? "text-expense" : "text-income"
             )}>
               {formatCurrency(reportTransactions.reduce((acc, t) => acc + t.amount, 0))}
             </p>
           </div>
-          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+          <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl border border-border dark:border-border-dark shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Transacciones</p>
             <p className="text-2xl font-black text-gray-900 dark:text-white">
               {reportTransactions.length}
             </p>
           </div>
-          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
+          <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl border border-border dark:border-border-dark shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Promedio por Tx</p>
             <p className="text-2xl font-black text-gray-900 dark:text-white">
               {formatCurrency(reportTransactions.length > 0 ? reportTransactions.reduce((acc, t) => acc + t.amount, 0) / reportTransactions.length : 0)}
@@ -291,9 +291,9 @@ export function ReportsTab({
 
         {reportDisplay === 'grouped' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
-              <h3 className="text-lg font-bold mb-6 dark:text-white">Distribución por {reportType === 'category' ? 'Categoría' : reportType === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
-              <div className="h-80">
+            <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl border border-border dark:border-border-dark shadow-sm">
+              <h3 className="text-base sm:text-lg font-bold mb-4 sm:mb-6 dark:text-text-dark">Distribución por {reportType === 'category' ? 'Categoría' : reportType === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
+              <div className="h-56 sm:h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <RePieChart>
                     <Pie
@@ -304,7 +304,7 @@ export function ReportsTab({
                       dataKey="value"
                     >
                       {reportData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={['#5A5A40', '#8B8B6B', '#A8A88F', '#C4C4B3', '#E1E1D7'][index % 5]} />
+                        <Cell key={`cell-${index}`} fill={['#059669', '#34D399', '#6EE7B7', '#A7F3D0', '#D1FAE5'][index % 5]} />
                       ))}
                     </Pie>
                     <Tooltip 
@@ -317,18 +317,18 @@ export function ReportsTab({
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm">
-              <h3 className="text-lg font-bold mb-6 dark:text-white">Ranking por {reportType === 'category' ? 'Categoría' : reportType === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
-              <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-hide">
+            <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl border border-border dark:border-border-dark shadow-sm">
+              <h3 className="text-base sm:text-lg font-bold mb-4 sm:mb-6 dark:text-text-dark">Ranking por {reportType === 'category' ? 'Categoría' : reportType === 'tag' ? 'Etiqueta' : 'Forma de Pago'}</h3>
+              <div className="space-y-3 sm:space-y-4 max-h-64 sm:max-h-80 overflow-y-auto pr-2 scrollbar-hide">
                 {reportData.map((item, index) => (
                   <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-2xl">
                     <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-900 rounded-full text-[10px] font-black text-[#5A5A40] dark:text-[#8B8B6B] shadow-sm">
+                      <span className="w-6 h-6 flex items-center justify-center bg-white dark:bg-gray-900 rounded-full text-[10px] font-black text-primary dark:text-primary-light shadow-sm">
                         {index + 1}
                       </span>
                       <p className="text-sm font-bold dark:text-white">{item.name}</p>
                     </div>
-                    <p className="text-sm font-black text-[#5A5A40] dark:text-[#8B8B6B]">{formatCurrency(item.amount)}</p>
+                    <p className="text-sm font-black text-primary dark:text-primary-light">{formatCurrency(item.amount)}</p>
                   </div>
                 ))}
                 {reportData.length === 0 && (
@@ -340,13 +340,13 @@ export function ReportsTab({
             </div>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-900 rounded-3xl border border-[#E4E3E0] dark:border-gray-800 shadow-sm overflow-hidden">
-            <div className="divide-y divide-[#E4E3E0] dark:divide-gray-800">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl border border-border dark:border-border-dark shadow-sm overflow-hidden">
+            <div className="divide-y divide-inner-border dark:divide-border-dark">
               {reportTransactions.map(tx => (
-                <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <div className="flex items-center gap-4">
+                <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors gap-2">
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                     <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-xl",
+                      "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg sm:text-xl",
                       tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
                     )}>
                       {getCategoryEmoji(tx.category)}
@@ -359,7 +359,7 @@ export function ReportsTab({
                         </p>
                         <div className="flex gap-1">
                           {Array.from(new Set(tx.tags || [])).map(tag => (
-                            <span key={tag} className="text-[8px] font-bold text-[#5A5A40] dark:text-[#8B8B6B]">#{tag}</span>
+                            <span key={tag} className="text-[8px] font-bold text-primary dark:text-primary-light">#{tag}</span>
                           ))}
                         </div>
                       </div>
@@ -367,7 +367,7 @@ export function ReportsTab({
                   </div>
                   <p className={cn(
                     "font-bold",
-                    tx.type === 'income' ? "text-green-600" : "text-red-600"
+                    tx.type === 'income' ? "text-income" : "text-expense"
                   )}>
                     {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                   </p>

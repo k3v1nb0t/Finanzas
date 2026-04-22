@@ -38,7 +38,7 @@ export function GoalsTab({
     >
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black tracking-tight dark:text-white">Metas de Ahorro</h2>
+          <h2 className="text-2xl font-black tracking-tight dark:text-text-dark">Metas de Ahorro</h2>
           <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Tus objetivos financieros</p>
         </div>
         <button 
@@ -50,7 +50,7 @@ export function GoalsTab({
             setGoalDeadline('');
             setIsGoalModalOpen(true);
           }}
-          className="bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md"
+          className="bg-primary dark:bg-primary-light text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md"
         >
           Nueva Meta
         </button>
@@ -60,7 +60,7 @@ export function GoalsTab({
         {savingsGoals.map((goal) => {
           const progress = Math.min(Math.round((goal.currentAmount / goal.targetAmount) * 100), 100);
           return (
-            <div key={goal.id} className="bg-white dark:bg-gray-900 p-6 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 space-y-4">
+            <div key={goal.id} className="bg-white dark:bg-gray-900 p-6 rounded-[32px] shadow-sm border border-border dark:border-border-dark space-y-4">
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center">
@@ -79,7 +79,7 @@ export function GoalsTab({
                       setSelectedGoalForAmount(goal);
                       setIsAddAmountModalOpen(true);
                     }}
-                    className="p-2 text-gray-300 hover:text-green-600 transition-colors"
+                    className="p-2 text-gray-300 hover:text-income transition-colors"
                     title="Añadir monto"
                   >
                     <Plus size={18} />
@@ -93,7 +93,7 @@ export function GoalsTab({
                       setGoalDeadline(goal.deadline || '');
                       setIsGoalModalOpen(true);
                     }}
-                    className="p-2 text-gray-300 hover:text-[#5A5A40] transition-colors"
+                    className="p-2 text-gray-300 hover:text-primary transition-colors"
                   >
                     <Pencil size={18} />
                   </button>
@@ -108,7 +108,7 @@ export function GoalsTab({
 
               <div className="space-y-2">
                 <div className="flex justify-between items-end">
-                  <p className="text-lg font-black text-[#5A5A40] dark:text-[#8B8B6B]">
+                  <p className="text-lg font-black text-primary dark:text-primary-light">
                     {formatCurrency(goal.currentAmount)}
                     <span className="text-xs font-bold text-gray-400 ml-1">/ {formatCurrency(goal.targetAmount)}</span>
                   </p>

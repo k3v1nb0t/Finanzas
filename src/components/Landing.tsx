@@ -53,30 +53,31 @@ export function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] dark:bg-black flex flex-col items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-bg dark:bg-bg-dark flex flex-col items-center justify-center p-4 relative">
       <div className="absolute top-6 right-6">
-        <button 
+        <button
           onClick={() => setIsDarkMode(!isDarkMode)}
-          className="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 transition-all"
+          className="w-10 h-10 flex items-center justify-center bg-surface dark:bg-surface-dark text-text-muted dark:text-text-muted-dark hover:text-primary dark:hover:text-primary-light rounded-xl shadow-sm border border-border dark:border-border-dark transition-all duration-200"
           title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
       </div>
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white dark:bg-gray-900 p-8 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800 text-center"
+        transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
+        className="w-full max-w-md bg-surface dark:bg-surface-dark p-8 rounded-[40px] shadow-xl shadow-primary/5 dark:shadow-black/20 border border-border dark:border-border-dark text-center"
       >
-        <div className="w-16 h-16 bg-[#5A5A40] dark:bg-[#8B8B6B] rounded-2xl flex items-center justify-center text-white mx-auto mb-6">
+        <div className="w-16 h-16 bg-primary dark:bg-primary-light rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-primary/20">
           <Wallet size={32} />
         </div>
         
         <AnimatePresence mode="wait">
           {step === 'login' && (
-            <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h1 className="text-3xl font-bold mb-2 dark:text-white">Bienvenido a Finanza</h1>
-              <p className="text-gray-500 dark:text-gray-400 mb-8">Toma el control de tu presupuesto personal y familiar de forma sencilla.</p>
+            <motion.div key="login" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}>
+              <h1 className="text-3xl font-bold mb-2 text-text dark:text-text-dark">Bienvenido a Finanza</h1>
+              <p className="text-text-muted dark:text-text-muted-dark mb-8">Toma el control de tu presupuesto personal y familiar de forma sencilla.</p>
               <button 
                 disabled={isActionLoading}
                 onClick={async () => {
@@ -89,10 +90,10 @@ export function Landing() {
                     setIsActionLoading(false);
                   }
                 }}
-                className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border border-[#E4E3E0] dark:border-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:text-white"
+                className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border border-border dark:border-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-text dark:text-text-dark"
               >
                 {isActionLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-[#5A5A40] dark:text-[#8B8B6B]" />
+                  <Loader2 className="w-5 h-5 animate-spin text-primary dark:text-primary-light" />
                 ) : (
                   <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
                 )}
@@ -102,19 +103,19 @@ export function Landing() {
           )}
 
           {step === 'choice' && (
-            <motion.div key="choice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-2xl font-bold mb-2 dark:text-white">Casi listo</h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-8">¿Cómo quieres empezar a gestionar tu presupuesto?</p>
+            <motion.div key="choice" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}>
+              <h2 className="text-2xl font-bold mb-2 dark:text-text-dark">Casi listo</h2>
+              <p className="text-text-muted dark:text-text-muted-dark mb-8">¿Cómo quieres empezar a gestionar tu presupuesto?</p>
               <div className="space-y-4">
-                <button 
+                <button
                   onClick={() => setStep('create')}
-                  className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#4A4A30] transition-colors"
+                  className="w-full bg-primary dark:bg-primary-light text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 hover:bg-primary-hover dark:hover:bg-primary-light-hover transition-colors"
                 >
                   Crear nuevo grupo
                 </button>
-                <button 
+                <button
                   onClick={() => setStep('join')}
-                  className="w-full bg-white dark:bg-gray-800 border border-[#E4E3E0] dark:border-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors dark:text-white"
+                  className="w-full bg-white dark:bg-gray-800 border border-border dark:border-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-text dark:text-text-dark"
                 >
                   Unirse a un grupo existente
                 </button>
@@ -123,9 +124,9 @@ export function Landing() {
           )}
 
           {step === 'create' && (
-            <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-2xl font-bold mb-2 dark:text-white">Crear Grupo</h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-8">Dale un nombre a tu presupuesto familiar o personal.</p>
+            <motion.div key="create" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}>
+              <h2 className="text-2xl font-bold mb-2 dark:text-text-dark">Crear Grupo</h2>
+              <p className="text-text-muted dark:text-text-muted-dark mb-8">Dale un nombre a tu presupuesto familiar o personal.</p>
               <form onSubmit={handleCreate} className="space-y-4">
                 <input 
                   type="text" 
@@ -134,25 +135,25 @@ export function Landing() {
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                   placeholder="Ej. Familia Pérez o Mi Presupuesto"
-                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] disabled:opacity-50 dark:text-white"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-primary disabled:opacity-50 text-text dark:text-text-dark"
                 />
                 <button 
                   type="submit"
                   disabled={isActionLoading}
-                  className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full bg-primary dark:bg-primary-light text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isActionLoading && <Loader2 className="w-5 h-5 animate-spin" />}
                   {isActionLoading ? 'Creando...' : 'Comenzar'}
                 </button>
-                <button type="button" onClick={() => setStep('choice')} disabled={isActionLoading} className="text-sm text-gray-400 font-medium disabled:opacity-50">Volver</button>
+                <button type="button" onClick={() => setStep('choice')} disabled={isActionLoading} className="text-sm text-text-muted dark:text-text-muted-dark font-medium disabled:opacity-50">Volver</button>
               </form>
             </motion.div>
           )}
 
           {step === 'join' && (
-            <motion.div key="join" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-2xl font-bold mb-2 dark:text-white">Unirse a Grupo</h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-8">Ingresa el código que te compartieron.</p>
+            <motion.div key="join" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}>
+              <h2 className="text-2xl font-bold mb-2 dark:text-text-dark">Unirse a Grupo</h2>
+              <p className="text-text-muted dark:text-text-muted-dark mb-8">Ingresa el código que te compartieron.</p>
               <form onSubmit={handleJoin} className="space-y-4">
                 <input 
                   type="text" 
@@ -161,17 +162,17 @@ export function Landing() {
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                   placeholder="CÓDIGO"
-                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 text-center text-2xl font-mono font-bold focus:ring-2 focus:ring-[#5A5A40] disabled:opacity-50 dark:text-white"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 text-center text-2xl font-mono font-bold focus:ring-2 focus:ring-primary disabled:opacity-50 dark:text-text-dark"
                 />
                 <button 
                   type="submit"
                   disabled={isActionLoading}
-                  className="w-full bg-[#5A5A40] dark:bg-[#8B8B6B] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full bg-primary dark:bg-primary-light text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isActionLoading && <Loader2 className="w-5 h-5 animate-spin" />}
                   {isActionLoading ? 'Uniéndose...' : 'Unirse ahora'}
                 </button>
-                <button type="button" onClick={() => setStep('choice')} disabled={isActionLoading} className="text-sm text-gray-400 font-medium disabled:opacity-50">Volver</button>
+                <button type="button" onClick={() => setStep('choice')} disabled={isActionLoading} className="text-sm text-text-muted dark:text-text-muted-dark font-medium disabled:opacity-50">Volver</button>
               </form>
             </motion.div>
           )}

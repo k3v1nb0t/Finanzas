@@ -87,13 +87,13 @@ export function FinancialAssistant({
         <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/20 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400 mb-6">
           <ShieldAlert size={40} />
         </div>
-        <h2 className="text-2xl font-bold mb-4 dark:text-white">Privacidad de IA</h2>
+        <h2 className="text-2xl font-bold mb-4 dark:text-text-dark">Privacidad de IA</h2>
         <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">
           Para utilizar el Asistente Financiero con IA, necesitamos tu permiso para procesar tus transacciones de forma segura y privada.
         </p>
         <button 
           onClick={toggleAISharing}
-          className="flex items-center gap-2 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-8 py-4 rounded-2xl font-bold hover:bg-[#4A4A30] transition-all shadow-lg"
+          className="flex items-center gap-2 bg-primary dark:bg-primary-light text-white px-8 py-4 rounded-2xl font-bold hover:bg-primary-hover transition-all shadow-lg"
         >
           <Sparkles size={20} />
           Habilitar Asistente IA
@@ -104,32 +104,32 @@ export function FinancialAssistant({
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-br from-[#5A5A40] to-[#4A4A30] dark:from-[#8B8B6B] dark:to-[#6B6B4B] p-8 rounded-[40px] text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-          <Brain size={120} />
+      <div className="bg-gradient-to-br from-primary to-primary-hover dark:from-primary-light dark:to-primary-light-hover p-6 sm:p-8 rounded-[40px] text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 sm:p-8 opacity-10">
+          <Brain size={80} className="sm:w-[120px] sm:h-[120px] w-20 h-20" />
         </div>
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center">
               <Sparkles size={24} />
             </div>
-            <h2 className="text-2xl font-bold">Asistente Financiero IA</h2>
+            <h2 className="text-xl sm:text-2xl font-bold">Asistente Financiero IA</h2>
           </div>
-          <p className="text-white/80 max-w-xl mb-8 leading-relaxed">
+          <p className="text-white/80 max-w-xl mb-6 sm:mb-8 leading-relaxed text-sm sm:text-base">
             Analizo tus patrones de gasto y te brindo consejos personalizados para mejorar tu salud financiera.
           </p>
-          <div className="flex flex-wrap gap-4">
-            <button 
+          <div className="flex flex-wrap gap-3 sm:gap-4">
+            <button
               onClick={analyzeFinances}
               disabled={isLoading}
-              className="flex items-center gap-2 bg-white text-[#5A5A40] px-8 py-4 rounded-2xl font-bold hover:bg-gray-50 transition-all shadow-lg disabled:opacity-50"
+              className="flex items-center gap-2 bg-white text-primary px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-bold hover:bg-gray-50 transition-all shadow-lg disabled:opacity-50 text-sm sm:text-base"
             >
               {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Play size={20} />}
               {isLoading ? 'Analizando...' : 'Generar Análisis'}
             </button>
-            <button 
+            <button
               onClick={toggleAISharing}
-              className="flex items-center gap-2 bg-white/10 backdrop-blur-md text-white px-6 py-4 rounded-2xl font-bold hover:bg-white/20 transition-all border border-white/20"
+              className="flex items-center gap-2 bg-white/10 backdrop-blur-md text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl font-bold hover:bg-white/20 transition-all border border-white/20 text-sm sm:text-base"
             >
               <Settings size={20} />
               Configurar
@@ -142,9 +142,9 @@ export function FinancialAssistant({
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-gray-900 p-8 rounded-[40px] shadow-xl border border-[#E4E3E0] dark:border-gray-800"
+          className="bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-[40px] shadow-xl border border-border dark:border-border-dark"
         >
-          <div className="prose dark:prose-invert max-w-none">
+          <div className="prose dark:prose-invert max-w-none text-sm sm:text-base">
             <Markdown>{analysis}</Markdown>
           </div>
         </motion.div>

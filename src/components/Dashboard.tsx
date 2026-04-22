@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useAuth } from '../AuthContext';
-import { 
-  Plus, 
-  Wallet, 
+import {
+  Plus,
+  Wallet,
   LayoutDashboard,
   History,
   Repeat,
@@ -16,7 +16,10 @@ import {
   Loader2,
   Users,
   Check,
-  CreditCard
+  CreditCard,
+  Menu,
+  X,
+  ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -179,13 +182,22 @@ export function Dashboard() {
   });
 
   const [isGroupSelectorOpen, setIsGroupSelectorOpen] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
-  // Close group selector when clicking outside
+
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest('.group-selector')) {
         setIsGroupSelectorOpen(false);
+      }
+      if (!target.closest('.header-menu-area')) {
+        setIsHeaderMenuOpen(false);
+      }
+      if (!target.closest('.more-menu-area')) {
+        setIsMoreMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -758,169 +770,222 @@ export function Dashboard() {
   }, [reportType, transactions, group, unitSearchInput, reportUnitFilter]);
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] dark:bg-gray-950 pb-24 transition-colors duration-300">
+    <div className="min-h-screen bg-bg dark:bg-bg-dark pb-28 sm:pb-24 transition-colors duration-300">
       <AnimatePresence>
         {isSwitching && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-white/80 dark:bg-gray-950/80 backdrop-blur-md flex flex-col items-center justify-center"
+            className="fixed inset-0 z-[200] bg-white/80 dark:bg-bg-dark/80 backdrop-blur-md flex flex-col items-center justify-center"
           >
-            <div className="w-16 h-16 bg-[#5A5A40] dark:bg-[#8B8B6B] rounded-2xl flex items-center justify-center text-white shadow-2xl mb-4">
+            <div className="w-16 h-16 bg-primary dark:bg-primary-light rounded-2xl flex items-center justify-center text-white shadow-2xl mb-4">
               <Loader2 size={32} className="animate-spin" />
             </div>
-            <p className="text-xs font-bold text-[#5A5A40] uppercase tracking-[0.3em] animate-pulse">Cambiando Presupuesto...</p>
+            <p className="text-xs font-bold text-primary uppercase tracking-[0.3em] animate-pulse">Cambiando Presupuesto...</p>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Header */}
-      <header className="sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-[#E4E3E0] dark:border-gray-800 z-40 px-4 py-3">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#5A5A40]/20">
-              <Wallet size={24} />
-            </div>
-            <div className="flex flex-col group-selector relative">
-              <h1 className="text-lg font-bold tracking-tight leading-tight dark:text-white">BudgetBuddy</h1>
-              <button 
-                onClick={() => setIsGroupSelectorOpen(!isGroupSelectorOpen)}
-                className="flex items-center gap-1 text-[10px] font-bold text-[#5A5A40] dark:text-[#8B8B6B] uppercase tracking-widest hover:underline transition-all"
-              >
-                <span>{group?.name || 'Cargando...'}</span>
-                <Plus size={10} className={cn("transition-transform duration-300", isGroupSelectorOpen ? "rotate-45" : "")} />
-              </button>
+      <header className="sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-border dark:border-border-dark z-40 px-3 py-2 sm:px-4 sm:py-3">
+        <div className="header-menu-area max-w-5xl mx-auto">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 flex-shrink-0">
+                <Wallet size={20} className="sm:w-6 sm:h-6" />
+              </div>
+              <div className="flex flex-col group-selector relative min-w-0">
+                <h1 className="text-base sm:text-lg font-bold tracking-tight leading-tight dark:text-white truncate">BudgetBuddy</h1>
+                <button
+                  onClick={() => { setIsGroupSelectorOpen(!isGroupSelectorOpen); setIsHeaderMenuOpen(false); }}
+                  className="flex items-center gap-1 text-[10px] font-bold text-primary dark:text-primary-light uppercase tracking-widest hover:underline transition-all"
+                >
+                  <span className="truncate">{group?.name || 'Cargando...'}</span>
+                  <Plus size={10} className={cn("transition-transform duration-300 flex-shrink-0", isGroupSelectorOpen ? "rotate-45" : "")} />
+                </button>
 
-              <AnimatePresence>
-                {isGroupSelectorOpen && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-[#E4E3E0] dark:border-gray-800 overflow-hidden z-50"
-                  >
-                    <div className="p-2 border-b border-gray-50 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
-                      <p className="px-3 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Mis Presupuestos</p>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-1">
-                      {groups.map(g => (
+                <AnimatePresence>
+                  {isGroupSelectorOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-border dark:border-border-dark overflow-hidden z-50"
+                    >
+                      <div className="p-2 border-b border-gray-50 dark:border-border-dark bg-gray-50/50 dark:bg-gray-800/50">
+                        <p className="px-3 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Mis Presupuestos</p>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto p-1">
+                        {groups.map(g => (
+                          <button
+                            key={g.id}
+                            onClick={() => {
+                              switchGroup(g.id);
+                              setIsGroupSelectorOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-bold transition-all",
+                              profile?.groupId === g.id
+                                ? "bg-primary dark:bg-primary-light text-white shadow-md"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "w-8 h-8 rounded-lg flex items-center justify-center",
+                                profile?.groupId === g.id ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"
+                              )}>
+                                <Users size={16} />
+                              </div>
+                              <span className="truncate max-w-[120px]">{g.name}</span>
+                            </div>
+                            {profile?.groupId === g.id && <Check size={16} />}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-1 border-t border-gray-50 dark:border-border-dark bg-gray-50/50 dark:bg-gray-800/50">
                         <button
-                          key={g.id}
                           onClick={() => {
-                            switchGroup(g.id);
+                            setGroupAction('create');
+                            setIsGroupModalOpen(true);
                             setIsGroupSelectorOpen(false);
                           }}
-                          className={cn(
-                            "w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-bold transition-all",
-                            profile?.groupId === g.id 
-                              ? "bg-[#5A5A40] dark:bg-[#8B8B6B] text-white shadow-md" 
-                              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                          )}
+                          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-primary dark:text-primary-light hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-8 h-8 rounded-lg flex items-center justify-center",
-                              profile?.groupId === g.id ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"
-                            )}>
-                              <Users size={16} />
-                            </div>
-                            <span className="truncate max-w-[120px]">{g.name}</span>
+                          <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center border border-border dark:border-border-dark">
+                            <Plus size={16} />
                           </div>
-                          {profile?.groupId === g.id && <Check size={16} />}
+                          <span>Crear nuevo grupo</span>
                         </button>
-                      ))}
-                    </div>
-                    <div className="p-1 border-t border-gray-50 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
-                      <button 
-                        onClick={() => {
-                          setGroupAction('create');
-                          setIsGroupModalOpen(true);
-                          setIsGroupSelectorOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center border border-[#E4E3E0] dark:border-gray-800">
-                          <Plus size={16} />
-                        </div>
-                        <span>Crear nuevo grupo</span>
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setGroupAction('join');
-                          setIsGroupModalOpen(true);
-                          setIsGroupSelectorOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center border border-[#E4E3E0] dark:border-gray-800">
-                          <Plus size={16} className="rotate-45" />
-                        </div>
-                        <span>Unirse a un grupo</span>
-                      </button>
-                    </div>
-                  </motion.div>
+                        <button
+                          onClick={() => {
+                            setGroupAction('join');
+                            setIsGroupModalOpen(true);
+                            setIsGroupSelectorOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center border border-border dark:border-border-dark">
+                            <Plus size={16} className="rotate-45" />
+                          </div>
+                          <span>Unirse a un grupo</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-transparent border-none text-[10px] sm:text-xs font-bold text-primary dark:text-primary-light focus:ring-0 py-1 w-[100px] sm:w-auto"
+                />
+              </div>
+              {/* Dark mode toggle — always visible as icon */}
+              <button
+                onClick={() => setIsDarkMode(prev => !prev)}
+                className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-primary dark:hover:text-primary-light transition-all"
+                aria-label="Modo oscuro"
+              >
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+              {/* Hamburger menu — hidden on lg (tabs in bottom nav) */}
+              <button
+                onClick={() => { setIsHeaderMenuOpen(!isHeaderMenuOpen); setIsGroupSelectorOpen(false); }}
+                className={cn(
+                  "lg:hidden w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all",
+                  isHeaderMenuOpen
+                    ? "bg-primary/10 text-primary dark:text-primary-light"
+                    : "bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-primary dark:hover:text-primary-light"
                 )}
-              </AnimatePresence>
+                aria-label="Menú"
+              >
+                {isHeaderMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
+              {/* Admin toggle on lg */}
+              {isAdmin && (
+                <button
+                  onClick={() => setViewMode(viewMode === 'admin' ? 'personal' : 'admin')}
+                  className="hidden lg:flex w-9 h-9 sm:w-10 sm:h-10 items-center justify-center rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-primary dark:hover:text-primary-light transition-all"
+                  aria-label={viewMode === 'admin' ? 'Vista Personal' : 'Administración'}
+                >
+                  <LayoutDashboard size={20} />
+                </button>
+              )}
+              {/* Logout icon on lg */}
+              <button
+                onClick={() => logout()}
+                className="hidden lg:flex w-9 h-9 sm:w-10 sm:h-10 items-center justify-center rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-all"
+                aria-label="Cerrar sesión"
+              >
+                <LogOut size={20} />
+              </button>
             </div>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-              <input 
-                type="month" 
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold text-[#5A5A40] dark:text-[#8B8B6B] focus:ring-0 py-1"
-              />
-            </div>
-            {isAdmin && (
-              <button 
-                onClick={() => setViewMode(viewMode === 'admin' ? 'personal' : 'admin')}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-                  viewMode === 'admin' 
-                    ? "bg-[#5A5A40] text-white shadow-md" 
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                )}
+
+          {/* Header dropdown menu — only on <lg */}
+          <div className="lg:hidden">
+          <AnimatePresence>
+            {isHeaderMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden border-t border-border dark:border-border-dark mt-2"
               >
-                <LayoutDashboard size={14} />
-                <span className="hidden xs:inline">{viewMode === 'admin' ? 'Admin' : 'Personal'}</span>
-              </button>
+                <div className="py-2 space-y-1">
+                  {isAdmin && (
+                    <button
+                      onClick={() => { setViewMode(viewMode === 'admin' ? 'personal' : 'admin'); setIsHeaderMenuOpen(false); }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
+                        viewMode === 'admin'
+                          ? "bg-primary text-white"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      )}
+                    >
+                      <LayoutDashboard size={18} />
+                      <span>{viewMode === 'admin' ? 'Vista Personal' : 'Administración'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setActiveTab('group'); setIsHeaderMenuOpen(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
+                      activeTab === 'group' ? "bg-primary/10 text-primary dark:text-primary-light" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <Users size={18} />
+                    <span>Familia</span>
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab('settings'); setIsHeaderMenuOpen(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
+                      activeTab === 'settings' ? "bg-primary/10 text-primary dark:text-primary-light" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <Settings size={18} />
+                    <span>Ajustes</span>
+                  </button>
+                  <div className="border-t border-border dark:border-border-dark my-1" />
+                  <button
+                    onClick={() => { logout(); setIsHeaderMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                  >
+                    <LogOut size={18} />
+                    <span>Cerrar Sesión</span>
+                  </button>
+                </div>
+              </motion.div>
             )}
-            <button 
-              onClick={() => setActiveTab('group')}
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-xl transition-all",
-                activeTab === 'group' ? "bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B]" : "bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B]"
-              )}
-              title="Familia"
-            >
-              <Users size={20} />
-            </button>
-            <button 
-              onClick={() => setActiveTab('settings')}
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-xl transition-all",
-                activeTab === 'settings' ? "bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B]" : "bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B]"
-              )}
-              title="Ajustes"
-            >
-              <Settings size={20} />
-            </button>
-            <button 
-              onClick={() => setIsDarkMode(prev => !prev)}
-              className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:text-[#5A5A40] dark:hover:text-[#8B8B6B] rounded-xl transition-all"
-              title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
-            >
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <button 
-              onClick={logout}
-              className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
-            >
-              <LogOut size={20} />
-            </button>
+          </AnimatePresence>
           </div>
         </div>
       </header>
@@ -937,7 +1002,7 @@ export function Dashboard() {
             >
               {/* Stats Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 relative overflow-hidden group">
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-border dark:border-border-dark relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
                     <Wallet size={48} />
                   </div>
@@ -946,33 +1011,33 @@ export function Dashboard() {
                 </div>
                 
                 <div className="grid grid-cols-2 sm:contents gap-4">
-                  <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex flex-col justify-between gap-2">
-                    <div className="w-8 h-8 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
+                  <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-border dark:border-border-dark flex flex-col justify-between gap-2">
+                    <div className="w-8 h-8 bg-green-50 dark:bg-green-900/20 text-income dark:text-income-dark rounded-xl flex items-center justify-center">
                       <Plus className="rotate-45" size={18} />
                     </div>
                     <div>
                       <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Ingresos</p>
-                      <p className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(stats.income)}</p>
+                      <p className="text-lg font-bold text-income dark:text-income-dark">{formatCurrency(stats.income)}</p>
                     </div>
                   </div>
                   
-                  <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex flex-col justify-between gap-2">
-                    <div className="w-8 h-8 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl flex items-center justify-center">
+                  <div className="bg-white dark:bg-gray-900 p-5 rounded-[32px] shadow-sm border border-border dark:border-border-dark flex flex-col justify-between gap-2">
+                    <div className="w-8 h-8 bg-red-50 dark:bg-red-900/20 text-expense dark:text-expense-dark rounded-xl flex items-center justify-center">
                       <Plus size={18} />
                     </div>
                     <div>
                       <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Gastos</p>
-                      <p className="text-lg font-bold text-red-600 dark:text-red-400">{formatCurrency(stats.expense)}</p>
+                      <p className="text-lg font-bold text-expense dark:text-expense-dark">{formatCurrency(stats.expense)}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Budget Progress Card */}
-              <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
-                <div className="flex justify-between items-center mb-6">
+              <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl shadow-sm border border-border dark:border-border-dark">
+                <div className="flex justify-between items-center mb-4 sm:mb-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] rounded-xl flex items-center justify-center">
+                    <div className="w-10 h-10 bg-primary/10 text-primary dark:text-primary-light rounded-xl flex items-center justify-center">
                       <Target size={20} />
                     </div>
                     <div>
@@ -995,7 +1060,7 @@ export function Dashboard() {
                       setCustomCategoriesInput(group?.customCategories || []);
                       setIsBudgetModalOpen(true);
                     }}
-                    className="text-sm font-bold text-[#5A5A40] dark:text-[#8B8B6B] hover:underline"
+                    className="text-sm font-bold text-primary dark:text-primary-light hover:underline"
                   >
                     {group?.budget ? 'Editar' : 'Establecer'}
                   </button>
@@ -1008,7 +1073,7 @@ export function Dashboard() {
                         <p className="text-2xl font-bold dark:text-white">{formatCurrency(stats.expense)} <span className="text-sm font-normal text-gray-400">/ {formatCurrency(group.budget)}</span></p>
                         <p className={cn(
                           "text-xs font-medium mt-1",
-                          budgetProgress?.isOver ? "text-red-500" : "text-green-600"
+                          budgetProgress?.isOver ? "text-red-500" : "text-income"
                         )}>
                           {budgetProgress?.isOver 
                             ? `Excedido por ${formatCurrency(Math.abs(budgetProgress.remaining))}` 
@@ -1023,7 +1088,7 @@ export function Dashboard() {
                       animate={{ width: `${budgetProgress?.percentage}%` }}
                       className={cn(
                         "h-full rounded-full transition-all duration-500",
-                        budgetProgress?.isOver ? "bg-red-500" : "bg-[#5A5A40] dark:bg-[#8B8B6B]"
+                        budgetProgress?.isOver ? "bg-red-500" : "bg-primary dark:bg-primary-light"
                       )}
                     />
                   </div>
@@ -1045,7 +1110,7 @@ export function Dashboard() {
                         setCustomCategoriesInput([]);
                         setIsBudgetModalOpen(true);
                       }}
-                      className="bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-[#4A4A30] transition-colors"
+                      className="bg-primary dark:bg-primary-light text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors"
                     >
                       Establecer Presupuesto
                     </button>
@@ -1053,7 +1118,7 @@ export function Dashboard() {
                 )}
 
                 {categoryBudgetProgress.length > 0 && (
-                  <div className="mt-8 pt-8 border-t border-[#F0EFEA] dark:border-gray-800 space-y-6">
+                  <div className="mt-8 pt-8 border-t border-inner-border dark:border-border-dark space-y-6">
                     <h4 className="text-sm font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Presupuesto por Categoría</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       {categoryBudgetProgress.map((item) => (
@@ -1070,7 +1135,7 @@ export function Dashboard() {
                               animate={{ width: `${item.percentage}%` }}
                               className={cn(
                                 "h-full rounded-full transition-all duration-500",
-                                item.isOver ? "bg-red-500" : "bg-[#8B8B6B]"
+                                item.isOver ? "bg-red-500" : "bg-primary-light"
                               )}
                             />
                           </div>
@@ -1090,20 +1155,20 @@ export function Dashboard() {
               </div>
 
               {/* Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl shadow-sm border border-border dark:border-border-dark">
                   <h3 className="text-lg font-semibold mb-6 flex items-center gap-2 dark:text-white">
                     <Plus className="rotate-45 text-gray-400" size={20} />
                     Actividad Mensual
                   </h3>
-                  <div className="h-64">
+                  <div className="h-48 sm:h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#374151" : "#F0F0F0"} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: isDarkMode ? '#6B7280' : '#999' }} />
                         <YAxis hide />
                         <Tooltip 
-                          cursor={{ fill: isDarkMode ? '#1F2937' : '#F5F5F0' }}
+                          cursor={{ fill: isDarkMode ? '#1F2937' : '#F5F5F5' }}
                           contentStyle={{ 
                             borderRadius: '12px', 
                             border: 'none', 
@@ -1119,12 +1184,12 @@ export function Dashboard() {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+                <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl shadow-sm border border-border dark:border-border-dark">
                   <h3 className="text-lg font-semibold mb-6 flex items-center gap-2 dark:text-white">
                     <BarChart3 size={20} className="text-gray-400" />
                     Gastos por Categoría
                   </h3>
-                  <div className="h-64">
+                  <div className="h-48 sm:h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <RePieChart>
                         <Pie
@@ -1135,7 +1200,7 @@ export function Dashboard() {
                           dataKey="value"
                         >
                           {categoryData.map((_, index) => (
-                            <Cell key={`cell-${index}`} fill={['#5A5A40', '#8B8B6B', '#A8A88F', '#C4C4B3', '#E1E1D7'][index % 5]} />
+                            <Cell key={`cell-${index}`} fill={['#059669', '#34D399', '#6EE7B7', '#A7F3D0', '#D1FAE5'][index % 5]} />
                           ))}
                         </Pie>
                         <Tooltip />
@@ -1146,18 +1211,18 @@ export function Dashboard() {
               </div>
 
               {/* Payment Methods Summary */}
-              <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800">
+              <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-3xl shadow-sm border border-border dark:border-border-dark">
                 <h3 className="text-lg font-semibold mb-6 flex items-center gap-2 dark:text-white">
                   <CreditCard size={20} className="text-gray-400" />
                   Cuadre por Forma de Pago
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                   {PAYMENT_METHODS.map(method => {
                     const amount = paymentMethodStats.find(s => s.name === method)?.value || 0;
                     return (
-                      <div key={method} className="bg-[#F5F5F0] dark:bg-gray-800 p-4 rounded-2xl">
+                      <div key={method} className="bg-bg dark:bg-gray-800 p-4 rounded-2xl">
                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">{method}</p>
-                        <p className="text-lg font-black text-[#5A5A40] dark:text-[#8B8B6B]">{formatCurrency(amount)}</p>
+                        <p className="text-lg font-black text-primary dark:text-primary-light">{formatCurrency(amount)}</p>
                       </div>
                     );
                   })}
@@ -1165,22 +1230,22 @@ export function Dashboard() {
               </div>
 
               {/* Recent Transactions */}
-              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-[#E4E3E0] dark:border-gray-800 overflow-hidden">
-                <div className="p-6 border-b border-[#E4E3E0] dark:border-gray-800 flex items-center justify-between">
+              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-border dark:border-border-dark overflow-hidden">
+                <div className="p-4 sm:p-6 border-b border-border dark:border-border-dark flex items-center justify-between">
                   <h3 className="text-lg font-semibold dark:text-white">Transacciones Recientes</h3>
                   <button 
                     onClick={() => setActiveTab('history')}
-                    className="text-sm font-medium text-[#5A5A40] dark:text-[#8B8B6B] hover:underline"
+                    className="text-sm font-medium text-primary dark:text-primary-light hover:underline"
                   >
                     Ver todo
                   </button>
                 </div>
-                <div className="divide-y divide-[#E4E3E0] dark:divide-gray-800">
+                <div className="divide-y divide-inner-border dark:divide-border-dark">
                   {filteredTransactions.slice(0, 5).map((tx) => (
-                    <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <div className="flex items-center gap-4">
+                    <div key={tx.id} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors gap-2">
+                      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                         <div className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center text-xl",
+                          "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-lg sm:text-xl",
                           tx.type === 'income' ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
                         )}>
                           {getCategoryEmoji(tx.category)}
@@ -1189,7 +1254,7 @@ export function Dashboard() {
                           <div className="flex items-center gap-2">
                             <p className="font-medium dark:text-white">{tx.description || tx.category}</p>
                             {tx.isRecurring && (
-                              <span className="bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#8B8B6B] text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-tighter flex items-center gap-0.5">
+                              <span className="bg-primary/10 text-primary dark:text-primary-light text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-tighter flex items-center gap-0.5">
                                 <Repeat size={8} /> Fijo
                               </span>
                             )}
@@ -1199,14 +1264,14 @@ export function Dashboard() {
                               {format(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), 'dd MMM', { locale: es })} • {tx.userName}
                             </p>
                             {Array.from(new Set(tx.tags || [])).map(tag => (
-                              <span key={tag} className="text-[8px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
+                              <span key={tag} className="text-[8px] text-primary dark:text-primary-light font-bold">#{tag}</span>
                             ))}
                           </div>
                         </div>
                       </div>
                       <p className={cn(
                         "font-bold",
-                        tx.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                        tx.type === 'income' ? "text-income dark:text-income-dark" : "text-expense dark:text-expense-dark"
                       )}>
                         {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                       </p>
@@ -1445,89 +1510,205 @@ export function Dashboard() {
         </AnimatePresence>
       </main>
 
-      {/* Floating Action Button */}
-      <button 
-        onClick={() => {
-          setEditingTransactionId(null);
-          setEditingRecurringId(null);
-          setAmount('');
-          setDescription('');
-          setCategory('');
-          setTags([]);
-          setIsRecurring(false);
-          setIsAdding(true);
-        }}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-14 h-14 bg-[#5A5A40] dark:bg-[#8B8B6B] text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50"
-      >
-        <Plus size={32} />
-      </button>
+      {/* Navigation — responsive bottom bar */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-t border-border dark:border-border-dark z-40 pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-5xl mx-auto flex items-center">
 
-      {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-t border-[#E4E3E0] dark:border-gray-800 z-40 px-2 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-around gap-1">
-          <button 
-            onClick={() => setActiveTab('dashboard')}
+          {/* Always visible: Inicio */}
+          <button
+            onClick={() => { setActiveTab('dashboard'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
             className={cn(
-              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
-              activeTab === 'dashboard' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+              "flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'dashboard' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
             )}
           >
             <LayoutDashboard size={22} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Inicio</span>
+            <span className="text-[10px] font-bold uppercase tracking-tight">Inicio</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('history')}
+
+          {/* Always visible: Historial */}
+          <button
+            onClick={() => { setActiveTab('history'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
             className={cn(
-              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
-              activeTab === 'history' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+              "flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'history' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
             )}
           >
             <History size={22} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Historial</span>
+            <span className="text-[10px] font-bold uppercase tracking-tight">Historial</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('recurring')}
+
+          {/* sm+: Fijos direct tab (hidden on mobile) */}
+          <button
+            onClick={() => { setActiveTab('recurring'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
             className={cn(
-              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
-              activeTab === 'recurring' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+              "hidden sm:flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'recurring' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
             )}
           >
             <Repeat size={22} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Fijos</span>
+            <span className="text-[10px] font-bold uppercase tracking-tight">Fijos</span>
           </button>
 
-          <div className="w-14 flex-shrink-0" /> {/* Spacer for FAB */}
-
-          <button 
-            onClick={() => setActiveTab('goals')}
+          {/* lg+: Reportes direct tab */}
+          <button
+            onClick={() => { setActiveTab('reports'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
             className={cn(
-              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
-              activeTab === 'goals' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
-            )}
-          >
-            <Target size={22} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Metas</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('reports')}
-            className={cn(
-              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
-              activeTab === 'reports' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+              "hidden lg:flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'reports' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
             )}
           >
             <BarChart3 size={22} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">Reportes</span>
+            <span className="text-[10px] font-bold uppercase tracking-tight">Reportes</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('ai')}
+
+          {/* FAB spacer with centered straddling button */}
+          <div className="w-14 flex-shrink-0 relative min-h-[52px] flex items-center justify-center">
+            <button
+              onClick={() => {
+                setEditingTransactionId(null);
+                setEditingRecurringId(null);
+                setAmount('');
+                setDescription('');
+                setCategory('');
+                setTags([]);
+                setIsRecurring(false);
+                setIsAdding(true);
+              }}
+              className="absolute -top-7 w-14 h-14 bg-primary dark:bg-primary-light text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50"
+            >
+              <Plus size={32} />
+            </button>
+          </div>
+
+          {/* Always visible: Metas */}
+          <button
+            onClick={() => { setActiveTab('goals'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
             className={cn(
-              "flex flex-col items-center gap-1 transition-all min-w-[50px]",
-              activeTab === 'ai' ? "text-[#5A5A40] dark:text-[#8B8B6B]" : "text-gray-400 dark:text-gray-500 hover:text-gray-600"
+              "flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'goals' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
+            )}
+          >
+            <Target size={22} />
+            <span className="text-[10px] font-bold uppercase tracking-tight">Metas</span>
+          </button>
+
+          {/* lg+: IA direct tab */}
+          <button
+            onClick={() => { setActiveTab('ai'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
+            className={cn(
+              "hidden lg:flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'ai' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
             )}
           >
             <Sparkles size={22} />
-            <span className="text-[9px] font-bold uppercase tracking-tighter">IA</span>
+            <span className="text-[10px] font-bold uppercase tracking-tight">IA</span>
           </button>
+
+          {/* lg+: Ajustes direct tab */}
+          <button
+            onClick={() => { setActiveTab('settings'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
+            className={cn(
+              "hidden lg:flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'settings' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
+            )}
+          >
+            <Settings size={22} />
+            <span className="text-[10px] font-bold uppercase tracking-tight">Ajustes</span>
+          </button>
+
+          {/* lg+: Familia direct tab */}
+          <button
+            onClick={() => { setActiveTab('group'); setIsHeaderMenuOpen(false); setIsMoreMenuOpen(false); }}
+            className={cn(
+              "hidden lg:flex flex-col items-center justify-center gap-0.5 transition-all flex-1 py-2.5 min-h-[52px]",
+              activeTab === 'group' ? "text-primary dark:text-primary-light" : "text-gray-400 dark:text-gray-500"
+            )}
+          >
+            <Users size={22} />
+            <span className="text-[10px] font-bold uppercase tracking-tight">Familia</span>
+          </button>
+
+          {/* More menu — hidden on lg (all tabs visible) */}
+          <div className="more-menu-area flex flex-col items-center flex-1 relative lg:hidden">
+            <button
+              onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+              className={cn(
+                "flex flex-col items-center justify-center gap-0.5 transition-all w-full py-2.5 min-h-[52px]",
+                ['recurring', 'reports', 'ai', 'group', 'settings'].includes(activeTab) && !isMoreMenuOpen ? "text-primary dark:text-primary-light" : "",
+                isMoreMenuOpen ? "text-primary dark:text-primary-light" : !['recurring', 'reports', 'ai', 'group', 'settings'].includes(activeTab) ? "text-gray-400 dark:text-gray-500" : ""
+              )}
+            >
+              <ChevronUp size={22} className={cn("transition-transform duration-200", isMoreMenuOpen ? "" : "rotate-180")} />
+              <span className="text-[10px] font-bold uppercase tracking-tight">Más</span>
+            </button>
+            <AnimatePresence>
+              {isMoreMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute bottom-full mb-2 right-1 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-border dark:border-border-dark overflow-hidden min-w-[160px]"
+                >
+                  {/* Mobile: Fijos in Más */}
+                  <button
+                    onClick={() => { setActiveTab('recurring'); setIsMoreMenuOpen(false); }}
+                    className={cn(
+                      "sm:hidden w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all",
+                      activeTab === 'recurring' ? "text-primary dark:text-primary-light bg-primary/5" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <Repeat size={18} />
+                    <span>Fijos</span>
+                  </button>
+                  {/* sm-: Reportes in Más */}
+                  <button
+                    onClick={() => { setActiveTab('reports'); setIsMoreMenuOpen(false); }}
+                    className={cn(
+                      "lg:hidden w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all border-t border-border dark:border-border-dark",
+                      activeTab === 'reports' ? "text-primary dark:text-primary-light bg-primary/5" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <BarChart3 size={18} />
+                    <span>Reportes</span>
+                  </button>
+                  {/* IA in Más when not lg */}
+                  <button
+                    onClick={() => { setActiveTab('ai'); setIsMoreMenuOpen(false); }}
+                    className={cn(
+                      "lg:hidden w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all border-t border-border dark:border-border-dark",
+                      activeTab === 'ai' ? "text-primary dark:text-primary-light bg-primary/5" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <Sparkles size={18} />
+                    <span>IA</span>
+                  </button>
+                  {/* Familia — always in Más */}
+                  <button
+                    onClick={() => { setActiveTab('group'); setIsMoreMenuOpen(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all border-t border-border dark:border-border-dark",
+                      activeTab === 'group' ? "text-primary dark:text-primary-light bg-primary/5" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <Users size={18} />
+                    <span>Familia</span>
+                  </button>
+                  {/* Ajustes — in Más when not lg */}
+                  <button
+                    onClick={() => { setActiveTab('settings'); setIsMoreMenuOpen(false); }}
+                    className={cn(
+                      "lg:hidden w-full flex items-center gap-3 px-4 py-3 text-sm font-bold transition-all border-t border-border dark:border-border-dark",
+                      activeTab === 'settings' ? "text-primary dark:text-primary-light bg-primary/5" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    <Settings size={18} />
+                    <span>Ajustes</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </nav>
 

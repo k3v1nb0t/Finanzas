@@ -48,7 +48,7 @@ export function RecurringTab({
     >
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black tracking-tight dark:text-white">Gastos Fijos</h2>
+          <h2 className="text-2xl font-black tracking-tight dark:text-text-dark">Gastos Fijos</h2>
           <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Programación mensual</p>
         </div>
         <button 
@@ -56,7 +56,7 @@ export function RecurringTab({
             setIsAdding(true);
             setIsRecurring(true);
           }}
-          className="bg-[#5A5A40] dark:bg-[#8B8B6B] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md"
+          className="bg-primary dark:bg-primary-light text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md"
         >
           Nuevo
         </button>
@@ -64,9 +64,9 @@ export function RecurringTab({
 
       <div className="grid grid-cols-1 gap-4">
         {recurringExpenses.map((re) => (
-          <div key={re.id} className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-[32px] shadow-sm border border-[#E4E3E0] dark:border-gray-800 flex items-center justify-between gap-3">
+          <div key={re.id} className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-[32px] shadow-sm border border-border dark:border-border-dark flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#F5F5F0] dark:bg-gray-800 rounded-2xl flex-shrink-0 flex items-center justify-center text-lg sm:text-xl">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-bg dark:bg-gray-800 rounded-2xl flex-shrink-0 flex items-center justify-center text-lg sm:text-xl">
                 {getCategoryEmoji(re.category)}
               </div>
               <div className="min-w-0">
@@ -77,7 +77,7 @@ export function RecurringTab({
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {(re.tags || []).map(tag => (
-                      <span key={tag} className="text-[8px] text-[#5A5A40] dark:text-[#8B8B6B] font-bold">#{tag}</span>
+                      <span key={tag} className="text-[8px] text-primary dark:text-primary-light font-bold">#{tag}</span>
                     ))}
                   </div>
                   {re.status === 'finished' && (
@@ -93,7 +93,7 @@ export function RecurringTab({
               <div className="mr-1 sm:mr-2">
                 <p className={cn(
                   "font-black text-sm sm:text-base whitespace-nowrap",
-                  re.type === 'income' ? "text-green-600" : "text-red-600"
+                  re.type === 'income' ? "text-income" : "text-expense"
                 )}>
                   {re.type === 'income' ? '+' : '-'}{formatCurrency(re.amount)}
                 </p>
@@ -101,7 +101,7 @@ export function RecurringTab({
               <div className="flex items-center">
                 <button 
                   onClick={() => handleProcessRecurringManually(re)}
-                  className="p-1.5 sm:p-2 text-gray-300 hover:text-green-600 transition-colors"
+                  className="p-1.5 sm:p-2 text-gray-300 hover:text-income transition-colors"
                   title="Procesar ahora"
                 >
                   <Play size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -119,7 +119,7 @@ export function RecurringTab({
                     setEndDate(re.endDate || '');
                     setIsAdding(true);
                   }}
-                  className="p-1.5 sm:p-2 text-gray-300 hover:text-[#5A5A40] transition-colors"
+                  className="p-1.5 sm:p-2 text-gray-300 hover:text-primary transition-colors"
                 >
                   <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" />
                 </button>

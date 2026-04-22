@@ -27,16 +27,17 @@ export function GroupModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden"
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-[40px] sm:rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
           >
-            <div className="p-8">
+            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mt-4 mb-2 sm:hidden" />
+            <div className="p-6 sm:p-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold dark:text-white">
+                <h2 className="text-2xl font-bold dark:text-text-dark">
                   {groupAction === 'create' ? 'Crear Nuevo Grupo' : 'Unirse a un Grupo'}
                 </h2>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors dark:text-gray-400">
@@ -54,7 +55,7 @@ export function GroupModal({
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
                       placeholder="Ej. Familia Pérez"
-                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-primary dark:text-white"
                     />
                   </div>
                 ) : (
@@ -66,7 +67,7 @@ export function GroupModal({
                       value={joinInviteCode}
                       onChange={(e) => setJoinInviteCode(e.target.value.toUpperCase())}
                       placeholder="ABC-123"
-                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-[#5A5A40] dark:text-white"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 focus:ring-2 focus:ring-primary dark:text-white"
                     />
                   </div>
                 )}
@@ -74,7 +75,7 @@ export function GroupModal({
                 <button 
                   type="submit"
                   disabled={isGroupActionLoading}
-                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-[#4A4A30] transition-colors disabled:opacity-50"
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary-hover transition-colors disabled:opacity-50"
                 >
                   {isGroupActionLoading && <Loader2 className="w-5 h-5 animate-spin" />}
                   {groupAction === 'create' ? 'Crear Grupo' : 'Unirse'}
