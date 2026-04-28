@@ -115,7 +115,7 @@ export function Dashboard() {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isAddAmountModalOpen, setIsAddAmountModalOpen] = useState(false);
   const [selectedGoalForAmount, setSelectedGoalForAmount] = useState<SavingsGoal | null>(null);
-  const [amountToAddInput, setAmountToAddInput] = useState('');
+  const [amountToAddInput, setAmountToAddInput] = useState('0.00');
   const [shouldRecordAsTransaction, setShouldRecordAsTransaction] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'reports' | 'group' | 'recurring' | 'goals' | 'ai' | 'settings'>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM'));
@@ -133,8 +133,8 @@ export function Dashboard() {
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
 
   // Form state
-  const [amount, setAmount] = useState('');
-  const [budgetInput, setBudgetInput] = useState('');
+  const [amount, setAmount] = useState('0.00');
+  const [budgetInput, setBudgetInput] = useState('0.00');
   const [categoryBudgetsInput, setCategoryBudgetsInput] = useState<Record<string, string>>({});
   const [categoryEmojisInput, setCategoryEmojisInput] = useState<Record<string, string>>({});
   const [customCategoriesInput, setCustomCategoriesInput] = useState<string[]>([]);
@@ -147,8 +147,8 @@ export function Dashboard() {
 
   // Goal Form State
   const [goalName, setGoalName] = useState('');
-  const [goalTarget, setGoalTarget] = useState('');
-  const [goalCurrent, setGoalCurrent] = useState('');
+  const [goalTarget, setGoalTarget] = useState('0.00');
+  const [goalCurrent, setGoalCurrent] = useState('0.00');
   const [goalDeadline, setGoalDeadline] = useState('');
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
@@ -159,7 +159,6 @@ export function Dashboard() {
   const [endDate, setEndDate] = useState('');
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
-  const [hasProcessedRecurring, setHasProcessedRecurring] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [groupAction, setGroupAction] = useState<'create' | 'join'>('create');
   const [newGroupName, setNewGroupName] = useState('');
@@ -239,10 +238,14 @@ export function Dashboard() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const txs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Transaction));
+      const txs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          amount: Math.round((data.amount || 0) * 100) / 100
+        } as Transaction;
+      });
       setTransactions(txs);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/transactions`);
@@ -260,10 +263,14 @@ export function Dashboard() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const rec = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as RecurringExpense));
+      const rec = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          amount: Math.round((data.amount || 0) * 100) / 100
+        } as RecurringExpense;
+      });
       setRecurringExpenses(rec);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/recurringExpenses`);
@@ -282,10 +289,15 @@ export function Dashboard() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const goals = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as SavingsGoal));
+      const goals = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          targetAmount: Math.round((data.targetAmount || 0) * 100) / 100,
+          currentAmount: Math.round((data.currentAmount || 0) * 100) / 100
+        } as SavingsGoal;
+      });
       setSavingsGoals(goals);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `groups/${profile.groupId}/savingsGoals`);
@@ -296,42 +308,53 @@ export function Dashboard() {
 
   // Process recurring expenses at the start of the month
   useEffect(() => {
-    if (!profile?.groupId || recurringExpenses.length === 0 || hasProcessedRecurring || !user) return;
+    // Only run if we have the group, user and the list is loaded
+    if (!profile?.groupId || !user || !recurringExpenses || recurringExpenses.length === 0) return;
 
     const processRecurring = async () => {
-      const currentMonth = formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM');
+      const now = new Date();
+      const currentMonth = formatInTimeZone(now, GUATEMALA_TZ, 'yyyy-MM');
       const batch = writeBatch(db);
-      let hasChanges = false;
+      let processedCount = 0;
+
+      // Get current month transactions to prevent duplicates even if lastProcessedMonth is stuck
+      // This allows self-healing if a transaction was deleted but the flag remained set
+      const currentMonthTxRecurringIds = new Set(
+        transactions
+          .filter(tx => formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'yyyy-MM') === currentMonth)
+          .map(tx => tx.recurringId)
+          .filter(Boolean)
+      );
 
       for (const rec of recurringExpenses) {
         if (!rec.active) continue;
-        if (rec.lastProcessedMonth === currentMonth) continue;
         
-        // Check if the day of the month has arrived
-        const currentDay = parseInt(formatInTimeZone(new Date(), GUATEMALA_TZ, 'd'));
+        // Skip if already processed for this month (check both flag and actual transaction)
+        if (rec.lastProcessedMonth === currentMonth && currentMonthTxRecurringIds.has(rec.id)) continue;
+        
+        // Check if the day of the month has arrived (or passed)
+        const currentDay = parseInt(formatInTimeZone(now, GUATEMALA_TZ, 'd'));
         if (rec.dayOfMonth > currentDay) continue;
         
         // Check if end date has passed
-        if (rec.endDate && rec.endDate < format(new Date(), 'yyyy-MM-dd')) {
-          batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', rec.id), { active: false, status: 'finished' });
-          hasChanges = true;
+        if (rec.endDate && rec.endDate < formatInTimeZone(now, GUATEMALA_TZ, 'yyyy-MM-dd')) {
+          batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', rec.id), { 
+            active: false, 
+            status: 'finished',
+            updatedAt: serverTimestamp() 
+          });
+          processedCount++;
           continue;
         }
 
         // Create transaction for this month
         const txId = doc(collection(db, 'groups', profile.groupId, 'transactions')).id;
-        const txDate = new Date();
-        txDate.setDate(rec.dayOfMonth);
+        const txDate = new Date(now.getFullYear(), now.getMonth(), 1, 12, 0, 0);
         
-        // If dayOfMonth is 31 and month has 30, it will roll over to next month.
-        // Let's adjust to last day of month if needed.
-        if (isLastDayOfMonth(new Date())) {
-          const lastDay = new Date(txDate.getFullYear(), txDate.getMonth() + 1, 0).getDate();
-          if (rec.dayOfMonth > lastDay) {
-            txDate.setDate(lastDay);
-          }
-        }
-
+        // Safely set day of month avoiding overflow
+        const lastDayOfRecMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        txDate.setDate(Math.min(rec.dayOfMonth, lastDayOfRecMonth));
+        
         const newTx: Transaction = {
           id: txId,
           groupId: profile.groupId,
@@ -340,7 +363,7 @@ export function Dashboard() {
           amount: rec.amount,
           type: rec.type,
           category: rec.category,
-          description: rec.description,
+          description: `(Fijo) ${rec.description}`,
           paymentMethod: rec.paymentMethod,
           isRecurring: true,
           recurringId: rec.id,
@@ -350,23 +373,26 @@ export function Dashboard() {
         };
 
         batch.set(doc(db, 'groups', profile.groupId, 'transactions', txId), newTx);
-        batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', rec.id), { lastProcessedMonth: currentMonth });
-        hasChanges = true;
+        batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', rec.id), { 
+          lastProcessedMonth: currentMonth,
+          updatedAt: serverTimestamp()
+        });
+        processedCount++;
       }
 
-      if (hasChanges) {
+      if (processedCount > 0) {
         try {
           await batch.commit();
-          console.log("Recurring expenses processed");
+          toast.success(`${processedCount} gastos fijos procesados automáticamente`);
         } catch (error) {
           console.error("Error processing recurring:", error);
+          toast.error('Error al procesar gastos fijos automáticos');
         }
       }
-      setHasProcessedRecurring(true);
     };
 
     processRecurring();
-  }, [profile?.groupId, recurringExpenses, hasProcessedRecurring, user]);
+  }, [profile?.groupId, recurringExpenses, user, transactions]);
 
   const stats = useMemo(() => {
     const monthTxs = transactions.filter(tx => {
@@ -374,9 +400,12 @@ export function Dashboard() {
       return formatInTimeZone(txDate, GUATEMALA_TZ, 'yyyy-MM') === selectedMonth;
     });
 
-    const income = monthTxs.filter(tx => tx.type === 'income').reduce((acc, tx) => acc + tx.amount, 0);
-    const expense = monthTxs.filter(tx => tx.type === 'expense').reduce((acc, tx) => acc + tx.amount, 0);
-    const balance = income - expense;
+    const incomeCents = monthTxs.filter(tx => tx.type === 'income').reduce((acc, tx) => acc + Math.round((tx.amount || 0) * 100), 0);
+    const expenseCents = monthTxs.filter(tx => tx.type === 'expense').reduce((acc, tx) => acc + Math.round((tx.amount || 0) * 100), 0);
+    
+    const income = incomeCents / 100;
+    const expense = expenseCents / 100;
+    const balance = (incomeCents - expenseCents) / 100;
 
     return { income, expense, balance };
   }, [transactions, selectedMonth]);
@@ -507,9 +536,19 @@ export function Dashboard() {
 
   const budgetProgress = useMemo(() => {
     if (!group?.budget) return null;
-    const percentage = Math.min((stats.expense / group.budget) * 100, 100);
-    const remaining = group.budget - stats.expense;
-    return { percentage, remaining, isOver: remaining < 0 };
+    
+    // Use cents for safe financial comparison
+    const expenseCents = Math.round(stats.expense * 100);
+    const budgetCents = Math.round(group.budget * 100);
+    
+    const percentage = budgetCents > 0 ? Math.min((expenseCents / budgetCents) * 100, 100) : 0;
+    // Uncapped percentage for display logic if needed
+    const realPercentage = budgetCents > 0 ? (expenseCents / budgetCents) * 100 : 0;
+    const remaining = (budgetCents - expenseCents) / 100;
+    const isOver = expenseCents > budgetCents;
+    const isAtLimit = expenseCents === budgetCents && budgetCents > 0;
+
+    return { percentage, realPercentage, remaining, isOver, isAtLimit };
   }, [group?.budget, stats.expense]);
 
   const categoryBudgetProgress = useMemo(() => {
@@ -518,18 +557,37 @@ export function Dashboard() {
     return Object.entries(group.categoryBudgets)
       .filter(([_, budget]) => budget > 0)
       .map(([category, budget]) => {
-        const spent = transactions
+        const spentCents = transactions
           .filter(tx => {
             const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
             return format(txDate, 'yyyy-MM') === selectedMonth && 
                    tx.type === 'expense' && 
                    tx.category === category;
           })
-          .reduce((acc, tx) => acc + tx.amount, 0);
+          .reduce((acc, tx) => acc + Math.round((tx.amount || 0) * 100), 0);
         
-        const percentage = Math.min((spent / budget) * 100, 100);
-        const remaining = budget - spent;
-        return { category, budget, spent, percentage, remaining, isOver: remaining < 0 };
+        const budgetCents = Math.round((budget || 0) * 100);
+        
+        const percentage = budgetCents > 0 ? Math.min((spentCents / budgetCents) * 100, 100) : 0;
+        const realPercentage = budgetCents > 0 ? (spentCents / budgetCents) * 100 : 0;
+        const remainingCents = budgetCents - spentCents;
+        const remaining = remainingCents / 100;
+        
+        // Use a 0.01 tolerance for precision safety if needed, 
+        // but strictly following integers (cents) should be enough
+        const isOver = spentCents > budgetCents;
+        const isAtLimit = spentCents === budgetCents && budgetCents > 0;
+
+        return { 
+          category, 
+          budget: budgetCents / 100, 
+          spent: spentCents / 100, 
+          percentage, 
+          realPercentage,
+          remaining, 
+          isOver,
+          isAtLimit
+        };
       })
       .sort((a, b) => b.percentage - a.percentage);
   }, [group?.categoryBudgets, transactions, selectedMonth]);
@@ -542,7 +600,7 @@ export function Dashboard() {
       groupId: profile.groupId,
       userId: user.uid,
       userName: user.displayName || user.email,
-      amount: parseFloat(amount),
+      amount: Math.round(parseFloat(amount || '0') * 100) / 100,
       type,
       category,
       description,
@@ -553,18 +611,16 @@ export function Dashboard() {
     };
 
     try {
-      if (editingTransactionId) {
-        await setDoc(doc(db, 'groups', profile.groupId, 'transactions', editingTransactionId), txData, { merge: true });
-        toast.success('Transacción actualizada');
-      } else {
-        await addDoc(collection(db, 'groups', profile.groupId, 'transactions'), txData);
-        toast.success('Transacción registrada');
-      }
+      const batch = writeBatch(db);
+      let txId = editingTransactionId || doc(collection(db, 'groups', profile.groupId, 'transactions')).id;
+      
+      batch.set(doc(db, 'groups', profile.groupId, 'transactions', txId), txData, { merge: true });
 
       if (isRecurring) {
+        const currentMonth = formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM');
         const recurringData: any = {
           groupId: profile.groupId,
-          amount: parseFloat(amount),
+          amount: Math.round(parseFloat(amount || '0') * 100) / 100,
           type,
           category,
           description,
@@ -572,20 +628,29 @@ export function Dashboard() {
           paymentMethod,
           tags,
           active: true,
+          lastProcessedMonth: currentMonth, // Mark as processed for this month since we just created the tx manually
           endDate: endDate || null,
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         };
         
-        if (editingRecurringId) {
-          await setDoc(doc(db, 'groups', profile.groupId, 'recurringExpenses', editingRecurringId), recurringData, { merge: true });
-        } else {
-          await addDoc(collection(db, 'groups', profile.groupId, 'recurringExpenses'), recurringData);
-        }
+        let recId = editingRecurringId || doc(collection(db, 'groups', profile.groupId, 'recurringExpenses')).id;
+        batch.set(doc(db, 'groups', profile.groupId, 'recurringExpenses', recId), { ...recurringData, id: recId }, { merge: true });
+        
+        // Update transaction to include recurring link and (Fijo) prefix
+        batch.update(doc(db, 'groups', profile.groupId, 'transactions', txId), { 
+          isRecurring: true, 
+          recurringId: recId,
+          description: `(Fijo) ${description}`
+        });
       }
+
+      await batch.commit();
+      toast.success(editingTransactionId ? 'Transacción actualizada' : 'Transacción registrada');
 
       // Reset form
       setIsAdding(false);
-      setAmount('');
+      setAmount('0.00');
       setDescription('');
       setCategory('');
       setTags([]);
@@ -623,12 +688,12 @@ export function Dashboard() {
 
     const categoryBudgets: Record<string, number> = {};
     Object.entries(categoryBudgetsInput).forEach(([cat, val]) => {
-      if (val) categoryBudgets[cat] = parseFloat(val);
+      if (val) categoryBudgets[cat] = Math.round(parseFloat(val) * 100) / 100;
     });
 
     try {
       await setDoc(doc(db, 'groups', profile.groupId), { 
-        budget: budgetInput ? parseFloat(budgetInput) : null,
+        budget: budgetInput ? Math.round(parseFloat(budgetInput) * 100) / 100 : null,
         categoryBudgets,
         categoryEmojis: categoryEmojisInput,
         customCategories: customCategoriesInput
@@ -647,8 +712,8 @@ export function Dashboard() {
     const goalData = {
       groupId: profile.groupId,
       name: goalName,
-      targetAmount: parseFloat(goalTarget),
-      currentAmount: parseFloat(goalCurrent) || 0,
+      targetAmount: Math.round(parseFloat(goalTarget || '0') * 100) / 100,
+      currentAmount: Math.round(parseFloat(goalCurrent || '0') * 100) / 100,
       deadline: goalDeadline || null,
       createdAt: serverTimestamp(),
     };
@@ -663,8 +728,8 @@ export function Dashboard() {
       }
       setIsGoalModalOpen(false);
       setGoalName('');
-      setGoalTarget('');
-      setGoalCurrent('');
+      setGoalTarget('0.00');
+      setGoalCurrent('0.00');
       setGoalDeadline('');
       setEditingGoalId(null);
     } catch (error) {
@@ -676,7 +741,8 @@ export function Dashboard() {
     const goal = savingsGoals.find(g => g.id === goalId);
     if (!goal) return;
 
-    const newAmount = goal.currentAmount + amount;
+    const roundedAmountToAdd = Math.round(amount * 100) / 100;
+    const newAmount = Math.round((goal.currentAmount + roundedAmountToAdd) * 100) / 100;
 
     try {
       await setDoc(doc(db, 'groups', profile.groupId, 'savingsGoals', goalId), { currentAmount: newAmount }, { merge: true });
@@ -686,7 +752,7 @@ export function Dashboard() {
           groupId: profile.groupId,
           userId: user.uid,
           userName: user.displayName || user.email,
-          amount: amount,
+          amount: roundedAmountToAdd,
           type: 'expense',
           category: 'Ahorro',
           description: `Ahorro para meta: ${goal.name}`,
@@ -696,7 +762,7 @@ export function Dashboard() {
       }
 
       setIsAddAmountModalOpen(false);
-      setAmountToAddInput('');
+      setAmountToAddInput('0.00');
       setSelectedGoalForAmount(null);
       toast.success('Monto añadido a la meta');
     } catch (error) {
@@ -1047,12 +1113,12 @@ export function Dashboard() {
                   </div>
                   <button 
                     onClick={() => {
-                      setBudgetInput(group?.budget?.toString() || '');
+                      setBudgetInput(group?.budget?.toFixed(2) || '0.00');
                       const initialCategoryBudgets: Record<string, string> = {};
                       const initialCategoryEmojis: Record<string, string> = {};
                       const allCategories = [...CATEGORIES.expense, ...CATEGORIES.income, ...(group?.customCategories || [])];
                       allCategories.forEach(cat => {
-                        initialCategoryBudgets[cat] = group?.categoryBudgets?.[cat]?.toString() || '';
+                        initialCategoryBudgets[cat] = group?.categoryBudgets?.[cat]?.toFixed(2) || '0.00';
                         initialCategoryEmojis[cat] = group?.categoryEmojis?.[cat] || CATEGORY_EMOJIS[cat] || '';
                       });
                       setCategoryBudgetsInput(initialCategoryBudgets);
@@ -1073,14 +1139,19 @@ export function Dashboard() {
                         <p className="text-2xl font-bold dark:text-white">{formatCurrency(stats.expense)} <span className="text-sm font-normal text-gray-400">/ {formatCurrency(group.budget)}</span></p>
                         <p className={cn(
                           "text-xs font-medium mt-1",
-                          budgetProgress?.isOver ? "text-red-500" : "text-income"
+                          budgetProgress?.isOver ? "text-red-500" : budgetProgress?.isAtLimit ? "text-orange-500" : "text-income"
                         )}>
                           {budgetProgress?.isOver 
                             ? `Excedido por ${formatCurrency(Math.abs(budgetProgress.remaining))}` 
-                            : `Restan ${formatCurrency(budgetProgress?.remaining || 0)}`}
+                            : budgetProgress?.isAtLimit 
+                              ? 'Has alcanzado el límite exacto'
+                              : `Restan ${formatCurrency(Math.max(0, budgetProgress?.remaining || 0))}`}
                         </p>
                       </div>
-                      <p className="text-sm font-bold text-gray-500">{Math.round((stats.expense / group.budget) * 100)}%</p>
+                      <p className={cn(
+                        "text-sm font-bold",
+                        budgetProgress?.isOver ? "text-red-500" : budgetProgress?.isAtLimit ? "text-orange-500" : "text-gray-500"
+                      )}>{Math.round(budgetProgress?.realPercentage || 0)}%</p>
                     </div>
                   <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                     <motion.div 
@@ -1088,7 +1159,7 @@ export function Dashboard() {
                       animate={{ width: `${budgetProgress?.percentage}%` }}
                       className={cn(
                         "h-full rounded-full transition-all duration-500",
-                        budgetProgress?.isOver ? "bg-red-500" : "bg-primary dark:bg-primary-light"
+                        budgetProgress?.isOver ? "bg-red-500" : budgetProgress?.isAtLimit ? "bg-orange-500" : "bg-primary dark:bg-primary-light"
                       )}
                     />
                   </div>
@@ -1098,11 +1169,11 @@ export function Dashboard() {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Aún no has establecido un presupuesto para este grupo.</p>
                     <button 
                       onClick={() => {
-                        setBudgetInput('');
+                        setBudgetInput('0.00');
                         const initialCategoryBudgets: Record<string, string> = {};
                         const initialCategoryEmojis: Record<string, string> = {};
                         [...CATEGORIES.expense, ...CATEGORIES.income].forEach(cat => {
-                          initialCategoryBudgets[cat] = '';
+                          initialCategoryBudgets[cat] = '0.00';
                           initialCategoryEmojis[cat] = CATEGORY_EMOJIS[cat] || '';
                         });
                         setCategoryBudgetsInput(initialCategoryBudgets);
@@ -1123,30 +1194,37 @@ export function Dashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       {categoryBudgetProgress.map((item) => (
                         <div key={item.category} className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <p className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                              {getCategoryEmoji(item.category)} {item.category}
-                            </p>
-                            <p className="text-xs font-bold text-gray-400">{Math.round((item.spent / item.budget) * 100)}%</p>
-                          </div>
-                          <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${item.percentage}%` }}
-                              className={cn(
-                                "h-full rounded-full transition-all duration-500",
-                                item.isOver ? "bg-red-500" : "bg-primary-light"
-                              )}
-                            />
-                          </div>
-                          <div className="flex justify-between text-[10px] font-medium">
-                            <span className="text-gray-400">{formatCurrency(item.spent)} gastado</span>
-                            <span className={cn(
-                              item.isOver ? "text-red-500" : "text-gray-400"
-                            )}>
-                              {item.isOver ? 'Excedido' : `${formatCurrency(item.remaining)} restante`}
-                            </span>
-                          </div>
+                              <div className="flex justify-between items-center">
+                                <p className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                                  {getCategoryEmoji(item.category)} {item.category}
+                                </p>
+                                <p className={cn(
+                                  "text-xs font-bold",
+                                  item.isOver ? "text-red-500" : item.isAtLimit ? "text-orange-500" : "text-gray-400"
+                                )}>{Math.round(item.realPercentage)}%</p>
+                              </div>
+                              <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${item.percentage}%` }}
+                                  className={cn(
+                                    "h-full rounded-full transition-all duration-500",
+                                    item.isOver ? "bg-red-500" : item.isAtLimit ? "bg-orange-500" : "bg-primary-light"
+                                  )}
+                                />
+                              </div>
+                              <div className="flex justify-between text-[10px] font-medium">
+                                <span className={cn(
+                                  item.isOver ? "text-red-500" : "text-gray-400"
+                                )}>
+                                  {formatCurrency(item.spent)} de {formatCurrency(item.budget)}
+                                </span>
+                                <span className={cn(
+                                  item.isOver ? "text-red-500" : item.isAtLimit ? "text-orange-500" : "text-gray-400"
+                                )}>
+                                  {item.isOver ? `Excedido por ${formatCurrency(Math.abs(item.remaining))}` : item.isAtLimit ? 'Límite alcanzado' : `${formatCurrency(Math.max(0, item.remaining))} restante`}
+                                </span>
+                              </div>
                         </div>
                       ))}
                     </div>
@@ -1345,40 +1423,78 @@ export function Dashboard() {
             <RecurringTab 
               recurringExpenses={recurringExpenses}
               getCategoryEmoji={getCategoryEmoji}
-              handleProcessRecurringManually={async (re) => {
-                const currentMonth = formatInTimeZone(new Date(), GUATEMALA_TZ, 'yyyy-MM');
-                if (re.lastProcessedMonth === currentMonth) {
-                  toast.error('Este gasto ya fue procesado este mes');
-                  return;
-                }
+              handleProcessRecurringManually={(re) => {
+                const now = new Date();
+                const currentMonth = formatInTimeZone(now, GUATEMALA_TZ, 'yyyy-MM');
                 
-                try {
-                  const txId = doc(collection(db, 'groups', profile?.groupId!, 'transactions')).id;
-                  const txDate = new Date();
-                  txDate.setDate(re.dayOfMonth);
-                  
-                  const newTx: Transaction = {
-                    id: txId,
-                    groupId: profile?.groupId || '',
-                    userId: user?.uid || '',
-                    userName: `Sistema (${user?.displayName || user?.email})`,
-                    amount: re.amount,
-                    type: re.type,
-                    category: re.category,
-                    description: re.description,
-                    paymentMethod: re.paymentMethod,
-                    isRecurring: true,
-                    recurringId: re.id,
-                    tags: re.tags || [],
-                    date: Timestamp.fromDate(txDate),
-                    createdAt: serverTimestamp(),
-                  };
+                // Check if already processed in transactions state
+                const alreadyHasTx = transactions.some(tx => 
+                  tx.recurringId === re.id && 
+                  formatInTimeZone(tx.date?.toDate ? tx.date.toDate() : new Date(tx.date), GUATEMALA_TZ, 'yyyy-MM') === currentMonth
+                );
 
-                  await setDoc(doc(db, 'groups', profile?.groupId!, 'transactions', txId), newTx);
-                  await setDoc(doc(db, 'groups', profile?.groupId!, 'recurringExpenses', re.id), { lastProcessedMonth: currentMonth }, { merge: true });
-                  toast.success('Gasto procesado manualmente');
-                } catch (error) {
-                  handleFirestoreError(error, OperationType.WRITE, `groups/${profile?.groupId}/transactions`);
+                const process = async () => {
+                  if (!profile?.groupId) return;
+                  const loadingToast = toast.loading('Procesando gasto...');
+                  
+                  try {
+                    const txId = doc(collection(db, 'groups', profile.groupId, 'transactions')).id;
+                    const txDate = new Date(now.getFullYear(), now.getMonth(), 1, 12, 0, 0);
+                    
+                    // Safely set day of month avoiding overflow
+                    const lastDayOfRecMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                    txDate.setDate(Math.min(re.dayOfMonth, lastDayOfRecMonth));
+                    
+                    const newTx: Transaction = {
+                      id: txId,
+                      groupId: profile.groupId,
+                      userId: user?.uid || '',
+                      userName: `${user?.displayName || user?.email} (Manual)`,
+                      amount: re.amount,
+                      type: re.type,
+                      category: re.category,
+                      description: `(Fijo) ${re.description}`,
+                      paymentMethod: re.paymentMethod,
+                      isRecurring: true,
+                      recurringId: re.id,
+                      tags: re.tags || [],
+                      date: Timestamp.fromDate(txDate),
+                      createdAt: serverTimestamp(),
+                    };
+
+                    const batch = writeBatch(db);
+                    batch.set(doc(db, 'groups', profile.groupId, 'transactions', txId), newTx);
+                    batch.update(doc(db, 'groups', profile.groupId, 'recurringExpenses', re.id), { 
+                      lastProcessedMonth: currentMonth,
+                      updatedAt: serverTimestamp()
+                    });
+                    
+                    await batch.commit();
+                    toast.dismiss(loadingToast);
+                    toast.success('Gasto procesado manualmente');
+                  } catch (error: any) {
+                    toast.dismiss(loadingToast);
+                    console.error("Manual processing error:", error);
+                    toast.error(error.message || 'Error al procesar el gasto');
+                  }
+                };
+
+                // If flag says processed OR we found a transaction, ask for confirmation
+                if (re.lastProcessedMonth === currentMonth || alreadyHasTx) {
+                  setConfirmModal({
+                    isOpen: true,
+                    title: '¿Procesar de nuevo?',
+                    message: alreadyHasTx 
+                      ? 'Ya existe una transacción para este gasto en el mes actual. ¿Deseas registrarla de nuevo?'
+                      : 'Este gasto ya aparece como procesado para este mes en la configuración. ¿Deseas registrarlo de nuevo manualmente?',
+                    confirmText: 'Sí, registrar de nuevo',
+                    onConfirm: () => {
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                      process();
+                    }
+                  });
+                } else {
+                  process();
                 }
               }}
               setEditingRecurringId={setEditingRecurringId}
@@ -1568,7 +1684,7 @@ export function Dashboard() {
               onClick={() => {
                 setEditingTransactionId(null);
                 setEditingRecurringId(null);
-                setAmount('');
+                setAmount('0.00');
                 setDescription('');
                 setCategory('');
                 setTags([]);
@@ -1799,7 +1915,8 @@ export function Dashboard() {
               const [cat, budget, emoji] = line.split(',');
               if (cat) {
                 const trimmedCat = cat.trim();
-                newBudgets[trimmedCat] = budget?.trim() || '0';
+                const budgetVal = parseFloat(budget?.trim() || '0');
+                newBudgets[trimmedCat] = isNaN(budgetVal) ? '0.00' : budgetVal.toFixed(2);
                 if (emoji) newEmojis[trimmedCat] = emoji.trim();
                 if (!CATEGORIES.expense.includes(trimmedCat) && !CATEGORIES.income.includes(trimmedCat) && !newCustom.includes(trimmedCat)) {
                   newCustom.push(trimmedCat);

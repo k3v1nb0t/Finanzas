@@ -122,7 +122,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const groupsList = snapshot.docs.map((doc) => doc.data() as Group);
+        const groupsList = snapshot.docs.map((doc) => {
+          const data = doc.data() as Group;
+          const categoryBudgets: Record<string, number> = {};
+          if (data.categoryBudgets) {
+            Object.entries(data.categoryBudgets).forEach(([cat, val]) => {
+              categoryBudgets[cat] = Math.round((val as number) * 100) / 100;
+            });
+          }
+          return {
+            ...data,
+            id: doc.id,
+            budget: data.budget ? Math.round(data.budget * 100) / 100 : null,
+            categoryBudgets
+          } as Group;
+        });
         setGroups(groupsList);
 
         // Update current group if it's in the list

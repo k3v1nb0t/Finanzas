@@ -193,7 +193,7 @@ export function HistoryTab({
                     <button 
                       onClick={() => {
                         setEditingTransactionId(tx.id);
-                        setAmount(tx.amount.toString());
+                        setAmount(tx.amount.toFixed(2));
                         setType(tx.type);
                         setCategory(tx.category);
                         setDescription(tx.description || '');

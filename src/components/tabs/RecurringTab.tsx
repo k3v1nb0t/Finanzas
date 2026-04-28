@@ -63,7 +63,9 @@ export function RecurringTab({
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {recurringExpenses.map((re) => (
+        {[...recurringExpenses]
+          .sort((a, b) => a.dayOfMonth - b.dayOfMonth)
+          .map((re) => (
           <div key={re.id} className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-[32px] shadow-sm border border-border dark:border-border-dark flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-bg dark:bg-gray-800 rounded-2xl flex-shrink-0 flex items-center justify-center text-lg sm:text-xl">
@@ -109,7 +111,7 @@ export function RecurringTab({
                 <button 
                   onClick={() => {
                     setEditingRecurringId(re.id);
-                    setAmount(re.amount.toString());
+                    setAmount(re.amount.toFixed(2));
                     setType(re.type || 'expense');
                     setCategory(re.category);
                     setDescription(re.description);

@@ -70,10 +70,15 @@ export function GoalModal({
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Q</span>
                       <input 
-                        type="number" 
+                        type="text" 
+                        inputMode="decimal"
                         required
-                        value={goalTarget}
-                        onChange={(e) => setGoalTarget(e.target.value)}
+                        value={goalTarget || '0.00'}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          const cents = parseInt(value || '0', 10);
+                          setGoalTarget((cents / 100).toFixed(2));
+                        }}
                         className="w-full pl-8 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-2 focus:ring-primary font-bold dark:text-white"
                         placeholder="0.00"
                       />
@@ -84,10 +89,15 @@ export function GoalModal({
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Q</span>
                       <input 
-                        type="number" 
+                        type="text" 
+                        inputMode="decimal"
                         required
-                        value={goalCurrent}
-                        onChange={(e) => setGoalCurrent(e.target.value)}
+                        value={goalCurrent || '0.00'}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          const cents = parseInt(value || '0', 10);
+                          setGoalCurrent((cents / 100).toFixed(2));
+                        }}
                         className="w-full pl-8 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-2 focus:ring-primary font-bold dark:text-white"
                         placeholder="0.00"
                       />

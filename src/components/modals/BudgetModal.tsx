@@ -75,10 +75,15 @@ export function BudgetModal({
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Q</span>
                     <input 
-                      type="number" 
+                      type="text" 
+                      inputMode="decimal"
                       required
-                      value={budgetInput}
-                      onChange={(e) => setBudgetInput(e.target.value)}
+                      value={budgetInput || '0.00'}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        const cents = parseInt(value || '0', 10);
+                        setBudgetInput((cents / 100).toFixed(2));
+                      }}
                       placeholder="0.00"
                       className="w-full pl-8 pr-4 py-4 bg-bg dark:bg-gray-800 rounded-2xl border-none focus:ring-2 focus:ring-primary font-bold text-lg dark:text-white"
                     />
@@ -166,9 +171,15 @@ export function BudgetModal({
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">Q</span>
                           <input 
-                            type="number" 
-                            value={categoryBudgetsInput[cat] || ''}
-                            onChange={(e) => setCategoryBudgetsInput(prev => ({ ...prev, [cat]: e.target.value }))}
+                            type="text" 
+                            inputMode="decimal"
+                            value={categoryBudgetsInput[cat] || '0.00'}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '');
+                              const cents = parseInt(value || '0', 10);
+                              const formatted = (cents / 100).toFixed(2);
+                              setCategoryBudgetsInput(prev => ({ ...prev, [cat]: formatted }));
+                            }}
                             placeholder="0.00"
                             className="w-full pl-6 pr-3 py-2 bg-bg dark:bg-gray-800 rounded-xl border-none focus:ring-2 focus:ring-primary text-sm font-bold dark:text-white"
                           />

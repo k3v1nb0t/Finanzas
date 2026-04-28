@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Banknote, CreditCard, ArrowUpRight, PlusCircle, Repeat } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Banknote, CreditCard, ArrowUpRight, PlusCircle, Repeat, Search, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CATEGORIES, PAYMENT_METHODS } from '../../types';
 import { cn } from '../../lib/utils';
@@ -70,6 +70,23 @@ export function TransactionModal({
   group
 }: TransactionModalProps) {
   const [isTagInputFocused, setIsTagInputFocused] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+
+  const availableCategories = useMemo(() => {
+    return Array.from(new Set(
+      type === 'expense' 
+        ? [...CATEGORIES.expense, ...(group?.customCategories || [])] 
+        : CATEGORIES.income
+    )).sort();
+  }, [type, group?.customCategories]);
+
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch) return availableCategories;
+    return availableCategories.filter(cat => 
+      cat.toLowerCase().includes(categorySearch.toLowerCase())
+    );
+  }, [categorySearch, availableCategories]);
 
   return (
     <AnimatePresence>
@@ -161,11 +178,15 @@ export function TransactionModal({
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">Q</span>
                   <input 
-                    type="number" 
-                    step="0.01"
+                    type="text" 
+                    inputMode="decimal"
                     required
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    value={amount || '0.00'}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      const cents = parseInt(value || '0', 10);
+                      setAmount((cents / 100).toFixed(2));
+                    }}
                     className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold focus:ring-2 focus:ring-primary placeholder:text-gray-400 dark:text-white"
                     placeholder="0.00"
                   />
@@ -173,21 +194,79 @@ export function TransactionModal({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-2 relative">
                   <label className="text-xs font-bold uppercase tracking-widest text-gray-400">Categoría</label>
-                  <select 
-                    required
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-primary dark:text-white"
-                  >
-                    <option value="" className="dark:bg-gray-900">Seleccionar</option>
-                    {Array.from(new Set(type === 'expense' ? [...CATEGORIES.expense, ...(group?.customCategories || [])] : CATEGORIES.income)).map(cat => (
-                      <option key={cat} value={cat} className="dark:bg-gray-900">
-                        {getCategoryEmoji(cat)} {cat}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                      {category ? getCategoryEmoji(category) : <Search size={18} />}
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="off"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 pl-12 pr-10 focus:ring-2 focus:ring-primary dark:text-white font-bold"
+                      placeholder="Seleccionar o buscar..."
+                      value={isCategoryDropdownOpen ? categorySearch : (category || '')}
+                      onChange={(e) => {
+                        setCategorySearch(e.target.value);
+                        if (!isCategoryDropdownOpen) setIsCategoryDropdownOpen(true);
+                      }}
+                      onFocus={() => {
+                        setIsCategoryDropdownOpen(true);
+                        setCategorySearch(category || '');
+                      }}
+                      onBlur={() => {
+                        // Small delay to allow clicking options
+                        setTimeout(() => {
+                          setIsCategoryDropdownOpen(false);
+                          setCategorySearch('');
+                        }, 200);
+                      }}
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                      <ChevronDown size={18} />
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {isCategoryDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 top-full mt-2 left-0 w-full bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden"
+                      >
+                        <div className="max-h-60 overflow-y-auto p-2 space-y-1">
+                          {filteredCategories.length > 0 ? (
+                            filteredCategories.map(cat => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => {
+                                  setCategory(cat);
+                                  setIsCategoryDropdownOpen(false);
+                                  setCategorySearch('');
+                                }}
+                                className={cn(
+                                  "w-full text-left px-4 py-3 rounded-xl transition-colors flex items-center gap-3",
+                                  category === cat 
+                                    ? "bg-primary/10 text-primary dark:bg-primary/20" 
+                                    : "hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200"
+                                )}
+                              >
+                                <span className="text-xl">{getCategoryEmoji(cat)}</span>
+                                <span className="font-bold">{cat}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="p-4 text-center text-gray-400 text-sm italic">
+                              No se encontraron categorías
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 <div className="space-y-2">

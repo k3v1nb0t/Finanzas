@@ -45,8 +45,8 @@ export function GoalsTab({
           onClick={() => {
             setEditingGoalId(null);
             setGoalName('');
-            setGoalTarget('');
-            setGoalCurrent('');
+            setGoalTarget('0.00');
+            setGoalCurrent('0.00');
             setGoalDeadline('');
             setIsGoalModalOpen(true);
           }}
@@ -88,8 +88,8 @@ export function GoalsTab({
                     onClick={() => {
                       setEditingGoalId(goal.id);
                       setGoalName(goal.name);
-                      setGoalTarget(goal.targetAmount.toString());
-                      setGoalCurrent(goal.currentAmount.toString());
+                      setGoalTarget(goal.targetAmount.toFixed(2));
+                      setGoalCurrent(goal.currentAmount.toFixed(2));
                       setGoalDeadline(goal.deadline || '');
                       setIsGoalModalOpen(true);
                     }}
